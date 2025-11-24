@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        table { border-collapse: collapse; width: 90%; margin: auto; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        h1 { text-align: center; }
+        #add-stats-form { text-align: center; margin: 20px auto; }
+        #add-stats-form input { width: 60px; margin-right: 5px; padding: 4px; }
+        button { padding: 4px 8px; }
+        button.delete-btn { color: white; background-color: red; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1 id="player-title">Player Stats</h1>
+
+    <div id="add-stats-form">
+        <input type="number" id="game-id" placeholder="Game ID" required>
+        <input type="number" id="touchdowns" placeholder="TDs" value="0">
+        <input type="number" id="receptions" placeholder="Receptions" value="0">
+        <input type="number" id="yards" placeholder="Yards" value="0">
+        <input type="number" id="interceptions" placeholder="Interceptions" value="0">
+        <input type="number" id="sacks" placeholder="Sacks" value="0">
+        <input type="number" id="flags-pulled" placeholder="Flags Pulled" value="0">
+        <button onclick="addStat()">Add Stat</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Game ID</th>
+                <th>Date</th>
+                <th>Home</th>
+                <th>Away</th>
+                <th>Result</th>
+                <th>TDs</th>
+                <th>Receptions</th>
+                <th>Yards</th>
+                <th>Interceptions</th>
+                <th>Sacks</th>
+                <th>Flags Pulled</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+    </table>
+
+    <script>
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        async function loadStats() {
+            const player_id = getQueryParam("player_id");
+            if (!player_id) return;
+
+            // Fetch player info
+            const playerRes = await fetch(`/players/${player_id}`);
+            if (!playerRes.ok) return;
+            const player = await playerRes.json();
+
+            document.getElementById("player-title").textContent = `${player.name}'s Stats`;
+
+            // Fetch stats
+            const res = await fetch(`/players/${player_id}/stats`);
+            const stats = await res.json();
+
+            const tbody = document.getElementById("stats-body");
+            tbody.innerHTML = "";
+
+            stats.forEach(stat => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${stat.game_id}</td>
+                    <td>${stat.game_date}</td>
+                    <td>${stat.home_team}</td>
+                    <td>${stat.away_team}</td>
+                    <td>${stat.result || ""}</td>
+                    <td>${stat.touchdowns}</td>
+                    <td>${stat.receptions}</td>
+                    <td>${stat.yards}</td>
+                    <td>${stat.interceptions}</td>
+                    <td>${stat.sacks}</td>
+                    <td>${stat.flags_pulled}</td>
+                    <td><button class="delete-btn" onclick="deleteStat(${stat.id})">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+
+        async function addStat() {
+            const player_id = getQueryParam("player_id");
+            if (!player_id) return;
+
+            const data = {
+                player_id: player_id,
+                game_id: document.getElementById("game-id").value,
+                touchdowns: document.getElementById("touchdowns").value || 0,
+                receptions: document.getElementById("receptions").value || 0,
+                yards: document.getElementById("yards").value || 0,
+                interceptions: document.getElementById("interceptions").value || 0,
+                sacks: document.getElementById("sacks").value || 0,
+                flags_pulled: document.getElementById("flags-pulled").value || 0
+            };
+
+            const res = await fetch("/stats", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                document.getElementById("game-id").value = "";
+                loadStats();
+            } else {
+                const err = await res.json();
+                alert(err.error || "Failed to add stat");
+            }
+        }
+
+        async function deleteStat(statId) {
+            if (!confirm("Are you sure you want to delete this stat?")) return;
+
+            const res = await fetch(`/player_stats/${statId}`, { method: "DELETE" });
+            if (res.ok) {
+                loadStats();
+            } else {
+                const err = await res.json();
+                alert(err.error || "Failed to delete stat");
+            }
+        }
+
+        loadStats();
+    </script>
+</body>
+</html>

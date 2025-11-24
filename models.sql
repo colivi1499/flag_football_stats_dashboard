@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS player_stats;
 
 CREATE TABLE teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
+    name TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE players (

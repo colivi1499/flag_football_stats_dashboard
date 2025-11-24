@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Flag Football Players</title>
+    <style>
+        table { border-collapse: collapse; width: 80%; margin: auto; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        h1 { text-align: center; }
+        #add-player-form { text-align: center; margin-bottom: 20px; }
+        #add-player-form input, #add-player-form select { padding: 5px; margin-right: 5px; }
+        button.delete-btn { color: white; background-color: red; border: none; padding: 4px 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Players</h1>
+
+    <div id="add-player-form">
+        <input type="text" id="player-name" placeholder="Player Name" required>
+        <select id="team-select"></select>
+        <button onclick="addPlayer()">Add Player</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Team</th>
+                <th>View Stats</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="players-body"></tbody>
+    </table>
+
+    <script>
+        async function loadTeams() {
+            const res = await fetch("/teams");
+            const teams = await res.json();
+            const select = document.getElementById("team-select");
+            select.innerHTML = "";
+            teams.forEach(team => {
+                const option = document.createElement("option");
+                option.value = team.id;
+                option.textContent = team.name;
+                select.appendChild(option);
+            });
+        }
+
+        async function loadPlayers() {
+            const res = await fetch("/players");
+            const players = await res.json();
+
+            const tbody = document.getElementById("players-body");
+            tbody.innerHTML = "";
+
+            players.forEach(player => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${player.id}</td>
+                    <td>${player.name}</td>
+                    <td>${player.team_name}</td>
+                    <td><a href="player_stats_page?player_id=${player.id}">View Stats</a></td>
+                    <td><button class="delete-btn" onclick="deletePlayer(${player.id})">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function addPlayer() {
+            const name = document.getElementById("player-name").value;
+            const team_id = document.getElementById("team-select").value;
+
+            if (!name || !team_id) return alert("Please enter a name and select a team.");
+
+            const res = await fetch("/players", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, team_id })
+            });
+
+            if (res.ok) {
+                document.getElementById("player-name").value = "";
+                await loadPlayers();
+            } else {
+                const data = await res.json();
+                alert("Error: " + data.error);
+            }
+        }
+
+        async function deletePlayer(playerId) {
+            if (!confirm("Are you sure you want to delete this player?")) return;
+
+            const res = await fetch(`/players/${playerId}`, { method: "DELETE" });
+            if (res.ok) {
+                await loadPlayers();
+            } else {
+                const data = await res.json();
+                alert("Error: " + data.error);
+            }
+        }
+
+        loadTeams().then(loadPlayers);
+    </script>
+</body>
+</html>

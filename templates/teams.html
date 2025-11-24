@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Teams</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 60%; margin: auto; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        h1, h2 { text-align: center; }
+        input, button { padding: 5px; font-size: 14px; }
+        button.delete-btn { color: white; background-color: red; border: none; cursor: pointer; padding: 4px 8px; }
+        #add-team-form { text-align: center; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Teams</h1>
+
+    <div id="add-team-form">
+        <input type="text" id="team-name" placeholder="Team Name">
+        <button id="add-team">Add Team</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="team-body"></tbody>
+    </table>
+
+    <script>
+        const teamBody = document.getElementById("team-body");
+        const teamNameInput = document.getElementById("team-name");
+        const addButton = document.getElementById("add-team");
+
+        // Load teams into table
+        async function loadTeams() {
+            const res = await fetch("/teams");
+            const teams = await res.json();
+
+            teamBody.innerHTML = "";
+            teams.forEach(team => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${team.id}</td>
+                    <td>${team.name}</td>
+                    <td><button class="delete-btn" onclick="deleteTeam(${team.id}, '${team.name}')">Delete</button></td>
+                `;
+                teamBody.appendChild(tr);
+            });
+        }
+
+        // Add a new team
+        addButton.addEventListener("click", async () => {
+            const name = teamNameInput.value.trim();
+            if (!name) return alert("Enter a team name");
+
+            const res = await fetch("/teams", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name })
+            });
+
+            if (res.ok) {
+                teamNameInput.value = "";
+                loadTeams();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to add team");
+            }
+        });
+
+        // Delete a team
+        async function deleteTeam(teamId, teamName) {
+            if (!confirm(`Delete team "${teamName}"?`)) return;
+
+            const res = await fetch(`/teams/${teamId}`, { method: "DELETE" });
+            if (res.ok) {
+                loadTeams();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to delete team");
+            }
+        }
+
+        // Initial load
+        loadTeams();
+    </script>
+</body>
+</html>

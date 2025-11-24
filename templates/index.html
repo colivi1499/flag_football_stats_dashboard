@@ -5,6 +5,10 @@
 </head>
 <body>
     <h1>Flag Football Stats</h1>
-    <p>Your backend is running!</p>
+    <ul>
+        <li><a href="{{ url_for('players_page') }}">View Players</a></li>
+        <li><a href="{{ url_for('teams_page') }}">View Teams</a></li>
+        <li><a href="{{ url_for('games_page') }}">View Games</a></li>
+    </ul>
 </body>
 </html>

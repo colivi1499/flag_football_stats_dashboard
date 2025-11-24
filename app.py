@@ -8,6 +8,23 @@ app = Flask(__name__)
 def home():
     return render_template("index.html")
 
+@app.route("/players_page")
+def players_page():
+    return render_template("players.html")
+
+
+@app.route("/player_stats_page")
+def player_stats_page():
+    return render_template("player_stats.html")
+
+@app.route("/teams_page")
+def teams_page():
+    return render_template("teams.html")
+
+@app.route("/games_page")
+def games_page():
+    return render_template("games.html")
+
 # -------- TEAM ENDPOINTS -------- #
 
 @app.route("/teams", methods=["POST"])
@@ -21,6 +38,20 @@ def create_team():
     conn.commit()
 
     return jsonify({"id": cur.lastrowid, "name": name}), 201
+
+@app.route("/teams/<int:team_id>", methods=["DELETE"])
+def delete_team(team_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    existing = cur.execute("SELECT id FROM teams WHERE id = ?", (team_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Team not found"}), 404
+
+    cur.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+    conn.commit()
+    return jsonify({"status": "deleted", "id": team_id})
+
 
 @app.route("/teams", methods=["GET"])
 def list_teams():
@@ -56,6 +87,15 @@ def create_player():
     conn.commit()
 
     return jsonify({"id": cur.lastrowid, "name": name, "team_id": team_id}), 201
+
+@app.route("/players/<int:player_id>", methods=["GET"])
+def get_player(player_id):
+    conn = get_db()
+    player = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
+    if player:
+        return jsonify(dict(player))
+    return jsonify({"error": "Player not found"}), 404
+
 
 @app.route("/players/<int:player_id>", methods=["DELETE"])
 def delete_player(player_id):
@@ -207,6 +247,26 @@ def create_game():
         }), 201
     except sqlite3.IntegrityError as e:
         return jsonify({"error": str(e)}), 400
+    
+@app.route("/games", methods=["GET"])
+def list_games():
+    conn = get_db()
+    games = conn.execute("""
+        SELECT 
+            g.id,
+            g.date,
+            g.result,
+            home.name AS home_team,
+            away.name AS away_team
+        FROM games g
+        JOIN teams home ON home.id = g.home_team_id
+        JOIN teams away ON away.id = g.away_team_id
+        ORDER BY g.date
+    """).fetchall()
+
+    # Convert SQLite rows to dictionaries
+    return jsonify([dict(game) for game in games])
+
     
 @app.route("/games/<int:game_id>", methods=["DELETE"])
 def delete_game(game_id):

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Games</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 80%; margin: auto; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        h1 { text-align: center; }
+        input, select, button { padding: 5px; margin: 5px; font-size: 14px; }
+        button.delete-btn { color: white; background-color: red; border: none; cursor: pointer; }
+        #add-game-form { text-align: center; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Games</h1>
+
+    <div id="add-game-form">
+        <input type="date" id="game-date" required>
+        <select id="home-team"></select>
+        <select id="away-team"></select>
+        <input type="text" id="game-result" placeholder="Result (optional)">
+        <button onclick="addGame()">Add Game</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Home Team</th>
+                <th>Away Team</th>
+                <th>Result</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="games-body"></tbody>
+    </table>
+
+    <script>
+        const gamesBody = document.getElementById("games-body");
+        const homeSelect = document.getElementById("home-team");
+        const awaySelect = document.getElementById("away-team");
+        const dateInput = document.getElementById("game-date");
+        const resultInput = document.getElementById("game-result");
+
+        let teams = [];
+
+        // Load teams into dropdowns
+        async function loadTeams() {
+            const res = await fetch("/teams");
+            teams = await res.json();
+
+            homeSelect.innerHTML = "";
+            awaySelect.innerHTML = "";
+
+            teams.forEach(team => {
+                const homeOption = document.createElement("option");
+                homeOption.value = team.id;
+                homeOption.textContent = team.name;
+                homeSelect.appendChild(homeOption);
+
+                const awayOption = document.createElement("option");
+                awayOption.value = team.id;
+                awayOption.textContent = team.name;
+                awaySelect.appendChild(awayOption);
+            });
+        }
+
+        // Load games table
+        async function loadGames() {
+            const res = await fetch("/games");
+            const games = await res.json();
+
+            gamesBody.innerHTML = "";
+            games.forEach(game => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${game.id}</td>
+                    <td>${game.date}</td>
+                    <td>${game.home_team}</td>
+                    <td>${game.away_team}</td>
+                    <td>${game.result || ""}</td>
+                    <td>
+                        <button class="delete-btn" onclick="deleteGame(${game.id})">Delete</button>
+                    </td>
+                `;
+                gamesBody.appendChild(tr);
+            });
+        }
+
+        // Add a new game
+        async function addGame() {
+            const date = dateInput.value;
+            const home_team_id = homeSelect.value;
+            const away_team_id = awaySelect.value;
+            const result = resultInput.value.trim();
+
+            if (!date || !home_team_id || !away_team_id) {
+                return alert("Date, home team, and away team are required.");
+            }
+            if (home_team_id === away_team_id) {
+                return alert("Home team and away team must be different.");
+            }
+
+            const res = await fetch("/games", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date, home_team_id, away_team_id, result })
+            });
+
+            if (res.ok) {
+                dateInput.value = "";
+                resultInput.value = "";
+                loadGames();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to add game");
+            }
+        }
+
+        // Delete a game
+        async function deleteGame(gameId) {
+            if (!confirm("Delete this game?")) return;
+
+            const res = await fetch(`/games/${gameId}`, { method: "DELETE" });
+            if (res.ok) {
+                loadGames();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to delete game");
+            }
+        }
+
+        // Initialize page
+        loadTeams().then(loadGames);
+    </script>
+</body>
+</html>
