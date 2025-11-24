@@ -1,1 +1,1 @@
-11/23/25- github repo and initial project design - 1 hour
+11/23/25- github repo, tech stack, database schema, endpoints, testing, frontend - 8 hours
