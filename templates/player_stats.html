@@ -64,7 +64,7 @@
 
             document.getElementById("player-title").textContent = `${player.name}'s Stats`;
 
-            // Fetch stats
+            // Fetch stats from correct endpoint: GET /players/<id>/stats
             const res = await fetch(`/players/${player_id}/stats`);
             const stats = await res.json();
 
@@ -75,9 +75,9 @@
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                     <td>${stat.game_id}</td>
-                    <td>${stat.game_date}</td>
-                    <td>${stat.home_team}</td>
-                    <td>${stat.away_team}</td>
+                    <td>${stat.game_date || ""}</td>
+                    <td>${stat.home_team || ""}</td>
+                    <td>${stat.away_team || ""}</td>
                     <td>${stat.result || ""}</td>
                     <td>${stat.touchdowns}</td>
                     <td>${stat.receptions}</td>
@@ -97,16 +97,17 @@
             if (!player_id) return;
 
             const data = {
-                player_id: player_id,
-                game_id: document.getElementById("game-id").value,
-                touchdowns: document.getElementById("touchdowns").value || 0,
-                receptions: document.getElementById("receptions").value || 0,
-                yards: document.getElementById("yards").value || 0,
-                interceptions: document.getElementById("interceptions").value || 0,
-                sacks: document.getElementById("sacks").value || 0,
-                flags_pulled: document.getElementById("flags-pulled").value || 0
+                player_id: Number(player_id),
+                game_id: Number(document.getElementById("game-id").value),
+                touchdowns: Number(document.getElementById("touchdowns").value),
+                receptions: Number(document.getElementById("receptions").value),
+                yards: Number(document.getElementById("yards").value),
+                interceptions: Number(document.getElementById("interceptions").value),
+                sacks: Number(document.getElementById("sacks").value),
+                flags_pulled: Number(document.getElementById("flags-pulled").value)
             };
 
+            // Correct route: POST /stats
             const res = await fetch("/stats", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -125,7 +126,9 @@
         async function deleteStat(statId) {
             if (!confirm("Are you sure you want to delete this stat?")) return;
 
-            const res = await fetch(`/player_stats/${statId}`, { method: "DELETE" });
+            // Correct route: DELETE /player-stats/<id>
+            const res = await fetch(`/player-stats/${statId}`, { method: "DELETE" });
+
             if (res.ok) {
                 loadStats();
             } else {

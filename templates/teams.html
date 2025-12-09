@@ -12,14 +12,24 @@
         input, button { padding: 5px; font-size: 14px; }
         button.delete-btn { color: white; background-color: red; border: none; cursor: pointer; padding: 4px 8px; }
         #add-team-form { text-align: center; margin-bottom: 20px; }
+        #update-team-form { text-align: center; margin-top: 20px; display: none; }
     </style>
 </head>
 <body>
     <h1>Teams</h1>
 
+    <!-- Add Team Form -->
     <div id="add-team-form">
         <input type="text" id="team-name" placeholder="Team Name">
         <button id="add-team">Add Team</button>
+    </div>
+
+    <!-- Update Team Form (hidden at first) -->
+    <div id="update-team-form">
+        <h3>Edit Team</h3>
+        <input type="text" id="update-team-name">
+        <button onclick="submitUpdate()">Save</button>
+        <button onclick="cancelUpdate()">Cancel</button>
     </div>
 
     <table>
@@ -27,6 +37,7 @@
             <tr>
                 <th>ID</th>
                 <th>Name</th>
+                <th>Players</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -37,6 +48,8 @@
         const teamBody = document.getElementById("team-body");
         const teamNameInput = document.getElementById("team-name");
         const addButton = document.getElementById("add-team");
+
+        let editingTeamId = null;
 
         // Load teams into table
         async function loadTeams() {
@@ -49,7 +62,13 @@
                 tr.innerHTML = `
                     <td>${team.id}</td>
                     <td>${team.name}</td>
-                    <td><button class="delete-btn" onclick="deleteTeam(${team.id}, '${team.name}')">Delete</button></td>
+                    <td>
+                        <a href="/team_players_page?team_id=${team.id}">Roster</a>
+                    </td>
+                    <td>
+                        <button onclick="startUpdate(${team.id}, '${team.name}')">Update</button>
+                        <button class="delete-btn" onclick="deleteTeam(${team.id}, '${team.name}')">Delete</button>
+                    </td>
                 `;
                 teamBody.appendChild(tr);
             });
@@ -74,6 +93,43 @@
                 alert(data.error || "Failed to add team");
             }
         });
+
+        // Start Update Process
+        function startUpdate(id, name) {
+            editingTeamId = id;
+            document.getElementById("update-team-name").value = name;
+
+            document.getElementById("update-team-form").style.display = "block";
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        // Cancel Update
+        function cancelUpdate() {
+            editingTeamId = null;
+            document.getElementById("update-team-form").style.display = "none";
+        }
+
+        // Submit Update
+        async function submitUpdate() {
+            if (!editingTeamId) return;
+
+            const name = document.getElementById("update-team-name").value.trim();
+            if (!name) return alert("Name cannot be empty.");
+
+            const res = await fetch(`/teams/${editingTeamId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name })
+            });
+
+            if (res.ok) {
+                cancelUpdate();
+                loadTeams();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to update team");
+            }
+        }
 
         // Delete a team
         async function deleteTeam(teamId, teamName) {

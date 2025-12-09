@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Combine Results</title>
+    <style>
+        table { border-collapse: collapse; width: 90%; margin: auto; }
+        th, td { border: 1px solid #ddd; padding: 8px; cursor: pointer; }
+        th { background: #f2f2f2; }
+        h1 { text-align: center; }
+        #add-form { text-align: center; margin-bottom: 20px; }
+        input, select { padding: 5px; margin: 3px; }
+        button { padding: 5px 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<h1>Combine Results</h1>
+
+<div id="add-form">
+    <select id="player-select"></select>
+    <input type="number" step="0.01" id="forty" placeholder="40 Yard Dash">
+    <input type="number" id="bench" placeholder="Bench Reps">
+    <input type="number" step="0.01" id="vertical" placeholder="Vertical Jump (in)">
+    <input type="number" step="0.01" id="broad" placeholder="Broad Jump (in)">
+    <input type="number" step="0.01" id="shuttle" placeholder="Shuttle">
+    <input type="number" step="0.01" id="cone" placeholder="3-Cone Drill">
+    <button onclick="addResult()">Add Result</button>
+</div>
+
+<table id="combine-table">
+    <thead>
+        <tr>
+            <th onclick="sortTable(0)">Player</th>
+            <th onclick="sortTable(1)">40 yd</th>
+            <th onclick="sortTable(2)">Bench</th>
+            <th onclick="sortTable(3)">Vertical</th>
+            <th onclick="sortTable(4)">Broad</th>
+            <th onclick="sortTable(5)">Shuttle</th>
+            <th onclick="sortTable(6)">3-Cone</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="results-body"></tbody>
+</table>
+
+<script>
+let currentSortColumn = -1;
+let currentSortDirection = 1; // 1 = ascending, -1 = descending
+
+async function loadPlayers() {
+    const res = await fetch("/players");
+    const players = await res.json();
+
+    const select = document.getElementById("player-select");
+    select.innerHTML = "";
+
+    players.forEach(p => {
+        const option = document.createElement("option");
+        option.value = p.id;
+        option.textContent = p.name;
+        select.appendChild(option);
+    });
+}
+
+async function loadResults() {
+    const res = await fetch("/combine");
+    const results = await res.json();
+
+    const tbody = document.getElementById("results-body");
+    tbody.innerHTML = "";
+
+    results.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${r.name}</td>
+            <td>${r.forty_yard || ""}</td>
+            <td>${r.bench_reps || ""}</td>
+            <td>${r.vertical || ""}</td>
+            <td>${r.broad_jump || ""}</td>
+            <td>${r.shuttle || ""}</td>
+            <td>${r.three_cone || ""}</td>
+            <td><button onclick="deleteResult(${r.id})">Delete</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function addResult() {
+    const payload = {
+        player_id: document.getElementById("player-select").value,
+        forty_yard: document.getElementById("forty").value || null,
+        bench_reps: document.getElementById("bench").value || null,
+        vertical: document.getElementById("vertical").value || null,
+        broad_jump: document.getElementById("broad").value || null,
+        shuttle: document.getElementById("shuttle").value || null,
+        three_cone: document.getElementById("cone").value || null
+    };
+
+    await fetch("/combine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+
+    loadResults();
+}
+
+async function deleteResult(id) {
+    await fetch(`/combine/${id}`, { method: "DELETE" });
+    loadResults();
+}
+
+// -----------------------
+// SORTING FUNCTION
+// -----------------------
+function sortTable(colIndex) {
+    const table = document.getElementById("combine-table");
+    const tbody = table.tBodies[0];
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+
+    if (currentSortColumn === colIndex) {
+        currentSortDirection *= -1; // Toggle direction if same column
+    } else {
+        currentSortColumn = colIndex;
+        currentSortDirection = 1; // Reset to ascending for new column
+    }
+
+    rows.sort((a, b) => {
+        const aText = a.children[colIndex].innerText.trim();
+        const bText = b.children[colIndex].innerText.trim();
+
+        const aNum = parseFloat(aText);
+        const bNum = parseFloat(bText);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+            return (aNum - bNum) * currentSortDirection;
+        }
+
+        return aText.localeCompare(bText) * currentSortDirection;
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+loadPlayers();
+loadResults();
+</script>
+
+</body>
+</html>

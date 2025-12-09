@@ -2,6 +2,8 @@ DROP TABLE IF EXISTS teams;
 DROP TABLE IF EXISTS players;
 DROP TABLE IF EXISTS games;
 DROP TABLE IF EXISTS player_stats;
+DROP TABLE IF EXISTS combine_results;
+
 
 CREATE TABLE teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,3 +41,16 @@ CREATE TABLE player_stats (
     FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE,
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
 );
+
+CREATE TABLE combine_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    forty_yard REAL,
+    bench_reps INTEGER,
+    vertical REAL,
+    broad_jump REAL,
+    shuttle REAL,
+    three_cone REAL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Aggregated Player Stats</title>
+    <style>
+        table { border-collapse: collapse; width: 90%; margin: auto; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        h1 { text-align: center; }
+    </style>
+</head>
+<body>
+
+<h1>Season Player Totals</h1>
+
+<table id="stats-table">
+    <thead>
+        <tr>
+            <th onclick="sortTable(0)">Name</th>
+            <th onclick="sortTable(1)">Team</th>
+            <th onclick="sortTable(2)">Yards</th>
+            <th onclick="sortTable(3)">Touchdowns</th>
+            <th onclick="sortTable(4)">Receptions</th>
+            <th onclick="sortTable(5)">Interceptions</th>
+            <th onclick="sortTable(6)">Sacks</th>
+            <th onclick="sortTable(7)">Flags Pulled</th>
+        </tr>
+    </thead>
+    <tbody id="stats-body"></tbody>
+</table>
+
+<script>
+
+async function loadAggregates() {
+    const res = await fetch("/aggregated_stats");
+    const stats = await res.json();
+
+    const tbody = document.getElementById("stats-body");
+    tbody.innerHTML = "";
+
+    stats.forEach(s => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${s.name}</td>
+            <td>${s.team_name || ""}</td>
+            <td>${s.total_yards || 0}</td>
+            <td>${s.total_touchdowns || 0}</td>
+            <td>${s.total_receptions || 0}</td>
+            <td>${s.total_interceptions || 0}</td>
+            <td>${s.total_sacks || 0}</td>
+            <td>${s.total_flags || 0}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// ---------------------
+// SORTING FUNCTION
+// ---------------------
+let currentSortColumn = -1;
+let currentSortDirection = 1; // 1 = ascending, -1 = descending
+
+function sortTable(colIndex) {
+    const table = document.getElementById("stats-table");
+    const tbody = table.tBodies[0];
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+
+    if (currentSortColumn === colIndex) {
+        // Toggle direction only if same column
+        currentSortDirection *= -1;
+    } else {
+        // New column clicked → default to ascending
+        currentSortColumn = colIndex;
+        currentSortDirection = 1;
+    }
+
+    rows.sort((a, b) => {
+        const aText = a.children[colIndex].innerText.trim();
+        const bText = b.children[colIndex].innerText.trim();
+
+        const aNum = parseFloat(aText);
+        const bNum = parseFloat(bText);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+            return (aNum - bNum) * currentSortDirection;
+        }
+
+        return aText.localeCompare(bText) * currentSortDirection;
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+loadAggregates();
+</script>
+
+
+</body>
+</html>

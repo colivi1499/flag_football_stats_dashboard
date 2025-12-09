@@ -15,6 +15,12 @@ def get_db():
         g.db.execute("PRAGMA foreign_keys = ON;")
     return g.db
 
+def query_db(query, args=(), one=False):
+    cur = get_db().execute(query, args)
+    rv = cur.fetchall()
+    cur.close()
+    return (rv[0] if rv else None) if one else rv
+
 def close_db(e=None):
     """Close the database connection at the end of the request."""
     db = g.pop("db", None)

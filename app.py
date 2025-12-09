@@ -1,6 +1,6 @@
 import sqlite3
 from flask import Flask, request, jsonify, render_template
-from database import get_db, close_db
+from database import get_db, close_db, query_db
 
 app = Flask(__name__)
 
@@ -21,9 +21,21 @@ def player_stats_page():
 def teams_page():
     return render_template("teams.html")
 
+@app.route("/team_players_page")
+def team_players_page():
+    return render_template("team_players.html")
+
 @app.route("/games_page")
 def games_page():
     return render_template("games.html")
+
+@app.route("/combine_page")
+def combine_page():
+    return render_template("combine.html")
+
+@app.route("/aggregated_stats_page")
+def aggregated_stats_page():
+    return render_template("aggregated_stats.html")
 
 # -------- TEAM ENDPOINTS -------- #
 
@@ -52,12 +64,41 @@ def delete_team(team_id):
     conn.commit()
     return jsonify({"status": "deleted", "id": team_id})
 
+@app.route("/teams/<int:team_id>", methods=["GET"])
+def get_team(team_id):
+    conn = get_db()
+    team = conn.execute("SELECT id, name FROM teams WHERE id = ?", (team_id,)).fetchone()
+    if not team:
+        return jsonify({"error": "Team not found"}), 404
+    return jsonify(dict(team))
+
 
 @app.route("/teams", methods=["GET"])
 def list_teams():
     conn = get_db()
     teams = conn.execute("SELECT * FROM teams").fetchall()
     return jsonify([dict(t) for t in teams])
+
+@app.route("/teams/<int:team_id>", methods=["PUT"])
+def update_team(team_id):
+    data = request.json
+    name = data.get("name")
+
+    if not name:
+        return jsonify({"error": "Team name is required"}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM teams WHERE id = ?", (team_id,))
+    if not cur.fetchone():
+        return jsonify({"error": "Team not found"}), 404
+
+    cur.execute("UPDATE teams SET name = ? WHERE id = ?", (name, team_id))
+    conn.commit()
+
+    return jsonify({"id": team_id, "name": name})
+
 
 
 # -------- PLAYER ENDPOINTS -------- #
@@ -72,21 +113,92 @@ def list_players():
     """).fetchall()
     return jsonify([dict(p) for p in players])
 
+@app.route("/players/<int:player_id>", methods=["PUT"])
+def update_player(player_id):
+    data = request.json
+    name = data.get("name")
+    team_id = data.get("team_id")
+    position = data.get("position")
+
+    if not name or not team_id:
+        return jsonify({"error": "name and team_id are required"}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Ensure player exists
+    exists = cur.execute("SELECT id FROM players WHERE id = ?", (player_id,)).fetchone()
+    if not exists:
+        return jsonify({"error": "Player not found"}), 404
+
+    try:
+        cur.execute("""
+            UPDATE players
+            SET name = ?, team_id = ?, position = ?
+            WHERE id = ?
+        """, (name, team_id, position, player_id))
+        conn.commit()
+
+        return jsonify({
+            "id": player_id,
+            "name": name,
+            "team_id": team_id,
+            "position": position
+        })
+
+    except sqlite3.IntegrityError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/players", methods=["POST"])
 def create_player():
     data = request.json
     name = data.get("name")
     team_id = data.get("team_id")
+    position = data.get("position")
+
+    if not name or not team_id:
+        return jsonify({"error": "name and team_id are required"}), 400
 
     conn = get_db()
     cur = conn.cursor()
+
     try:
-        cur.execute("INSERT INTO players (name, team_id) VALUES (?, ?)", (name, team_id))
+        cur.execute("""
+            INSERT INTO players (name, team_id, position)
+            VALUES (?, ?, ?)
+        """, (name, team_id, position))
+        conn.commit()
+
+        return jsonify({
+            "id": cur.lastrowid,
+            "name": name,
+            "team_id": team_id,
+            "position": position
+        }), 201
+
     except sqlite3.IntegrityError as e:
         return jsonify({"error": str(e)}), 400
-    conn.commit()
+    
+@app.route("/teams/<int:team_id>/players", methods=["GET"])
+def list_players_for_team(team_id):
+    conn = get_db()
 
-    return jsonify({"id": cur.lastrowid, "name": name, "team_id": team_id}), 201
+    # Ensure team exists
+    team = conn.execute("SELECT id FROM teams WHERE id = ?", (team_id,)).fetchone()
+    if not team:
+        return jsonify({"error": "Team not found"}), 404
+
+    players = conn.execute("""
+        SELECT id, name, team_id, position
+        FROM players
+        WHERE team_id = ?
+        ORDER BY name
+    """, (team_id,)).fetchall()
+
+    return jsonify([dict(player) for player in players])
+
+
 
 @app.route("/players/<int:player_id>", methods=["GET"])
 def get_player(player_id):
@@ -166,56 +278,94 @@ def update_stats():
     return jsonify({"status": "ok"}), 200
 
 
-@app.route("/players/<int:player_id>/stats", methods=["GET"])
-def get_player_stats(player_id):
+@app.route("/player-stats", methods=["GET"])
+def list_player_stats():
+    game_id = request.args.get("game_id")
+    player_id = request.args.get("player_id")
+
+    query = "SELECT * FROM player_stats WHERE 1=1"
+    params = []
+
+    if game_id:
+        query += " AND game_id = ?"
+        params.append(game_id)
+
+    if player_id:
+        query += " AND player_id = ?"
+        params.append(player_id)
+
+    conn = get_db()
+    stats = conn.execute(query, params).fetchall()
+
+    return jsonify([dict(s) for s in stats])
+
+@app.route("/player-stats/<int:stats_id>", methods=["DELETE"])
+def delete_player_stats(stats_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    existing = cur.execute("SELECT id FROM player_stats WHERE id = ?", (stats_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "player_stats entry not found"}), 404
+
+    cur.execute("DELETE FROM player_stats WHERE id = ?", (stats_id,))
+    conn.commit()
+
+    return jsonify({"status": "deleted", "id": stats_id}), 200
+
+
+@app.route("/games/<int:game_id>/player-stats", methods=["GET"])
+def get_game_player_stats(game_id):
     conn = get_db()
 
     stats = conn.execute("""
         SELECT 
+            ps.*,
+            p.name AS player_name,
+            p.position AS position
+        FROM player_stats ps
+        JOIN players p ON p.id = ps.player_id
+        WHERE ps.game_id = ?
+        ORDER BY p.name
+    """, (game_id,)).fetchall()
+
+    return jsonify([dict(s) for s in stats])
+
+@app.route("/players/<int:player_id>/stats", methods=["GET"])
+def get_stats_for_player(player_id):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT 
             ps.id,
             ps.game_id,
-            g.date AS game_date,
-            g.result AS result,
-            home.name AS home_team,
-            away.name AS away_team,
+            ps.player_id,
             ps.touchdowns,
             ps.receptions,
             ps.yards,
             ps.interceptions,
             ps.sacks,
-            ps.flags_pulled
+            ps.flags_pulled,
+
+            g.date AS game_date,
+            home.name AS home_team,
+            away.name AS away_team,
+            g.result AS result
+
         FROM player_stats ps
         JOIN games g ON g.id = ps.game_id
         JOIN teams home ON home.id = g.home_team_id
         JOIN teams away ON away.id = g.away_team_id
         WHERE ps.player_id = ?
-        ORDER BY g.date
-    """, (player_id,)).fetchall()
+        ORDER BY g.date DESC
+    """, (player_id,))
 
-    return jsonify([dict(s) for s in stats])
+    rows = cur.fetchall()
+
+    return jsonify([dict(row) for row in rows])
 
 
-@app.route("/games/<int:game_id>/stats", methods=["GET"])
-def get_game_stats(game_id):
-    conn = get_db()
-
-    stats = conn.execute("""
-        SELECT
-            ps.id,
-            ps.player_id,
-            p.name AS player_name,
-            ps.touchdowns,
-            ps.receptions,
-            ps.yards,
-            ps.interceptions,
-            ps.sacks,
-            ps.flags_pulled
-        FROM player_stats ps
-        JOIN players p ON p.id = ps.player_id
-        WHERE ps.game_id = ?
-    """, (game_id,)).fetchall()
-
-    return jsonify([dict(s) for s in stats])
 
 # --------- GAMES ENDPOINTS --------- #
 @app.route("/games", methods=["POST"])
@@ -284,6 +434,76 @@ def delete_game(game_id):
 
     return jsonify({"status": "deleted", "id": game_id}), 200
 
+# --------- COMBINE ENDPOINTS ---------- #
+
+@app.route("/combine", methods=["GET"])
+def get_combine_results():
+    player_id = request.args.get("player_id")
+
+    query = "SELECT combine_results.*, players.name FROM combine_results JOIN players ON players.id = combine_results.player_id"
+    params = []
+
+    if player_id:
+        query += " WHERE player_id = ?"
+        params.append(player_id)
+
+    rows = query_db(query, params)
+    results = [dict(row) for row in rows]
+    return jsonify(results)
+
+
+@app.route("/combine", methods=["POST"])
+def add_combine_result():
+    data = request.json
+    player_id = data.get("player_id")
+
+    db = get_db()
+    db.execute("""
+        INSERT INTO combine_results (player_id, forty_yard, bench_reps, vertical, broad_jump, shuttle, three_cone)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        player_id,
+        data.get("forty_yard"),
+        data.get("bench_reps"),
+        data.get("vertical"),
+        data.get("broad_jump"),
+        data.get("shuttle"),
+        data.get("three_cone")
+    ))
+
+    db.commit()
+    return jsonify({"status": "ok"}), 201
+
+
+@app.route("/combine/<int:combine_id>", methods=["DELETE"])
+def delete_combine(combine_id):
+    db = get_db()
+    db.execute("DELETE FROM combine_results WHERE id = ?", (combine_id,))
+    db.commit()
+    return jsonify({"status": "deleted"})
+
+# -------- AGGREGATED STATS ENDPOINTS --------- #
+@app.route("/aggregated_stats")
+def aggregated_stats():
+    rows = query_db("""
+        SELECT 
+            p.id,
+            p.name,
+            t.name AS team_name,
+            SUM(ps.touchdowns) AS total_touchdowns,
+            SUM(ps.receptions) AS total_receptions,
+            SUM(ps.yards) AS total_yards,
+            SUM(ps.interceptions) AS total_interceptions,
+            SUM(ps.sacks) AS total_sacks,
+            SUM(ps.flags_pulled) AS total_flags
+        FROM players p
+        LEFT JOIN player_stats ps ON p.id = ps.player_id
+        LEFT JOIN teams t ON p.team_id = t.id
+        GROUP BY p.id
+        ORDER BY total_yards DESC
+    """)
+
+    return jsonify([dict(r) for r in rows])
 
 
 @app.teardown_appcontext

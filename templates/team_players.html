@@ -2,24 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Flag Football Players</title>
+    <title>Team Players</title>
     <style>
         table { border-collapse: collapse; width: 80%; margin: auto; }
         th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
         h1 { text-align: center; }
         #add-player-form { text-align: center; margin-bottom: 20px; }
-        #add-player-form input, #add-player-form select { padding: 5px; margin-right: 5px; }
+        #add-player-form input { padding: 5px; margin-right: 5px; }
         button.delete-btn { color: white; background-color: red; border: none; padding: 4px 8px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>Players</h1>
+
+    <h1 id="team-title">Players</h1>
 
     <div id="add-player-form">
         <input type="text" id="player-name" placeholder="Player Name" required>
         <input type="text" id="player-position" placeholder="Position (optional)">
-        <select id="team-select"></select>
         <button onclick="addPlayer()">Add Player</button>
     </div>
 
@@ -28,7 +28,6 @@
             <tr>
                 <th>ID</th>
                 <th>Name</th>
-                <th>Team</th>
                 <th>Position</th>
                 <th>View Stats</th>
                 <th>Actions</th>
@@ -36,155 +35,141 @@
         </thead>
         <tbody id="players-body"></tbody>
     </table>
-    
-    <!-- Hidden update form -->
+
+    <!-- Update form -->
     <div id="update-form" style="display:none; text-align:center; margin-top:20px;">
         <h3>Edit Player</h3>
         <input type="text" id="edit-name" placeholder="Name">
         <input type="text" id="edit-position" placeholder="Position (optional)">
-        <select id="edit-team"></select>
         <button onclick="submitUpdate()">Save</button>
         <button onclick="cancelUpdate()">Cancel</button>
     </div>
-    
+
     <script>
-        let teamsCache = [];
+        let teamId = null;
+        let teamName = "";
         let editingPlayerId = null;
-    
-        async function loadTeams() {
-            const res = await fetch("/teams");
-            teamsCache = await res.json();
-    
-            const select = document.getElementById("team-select");
-            select.innerHTML = "";
-            teamsCache.forEach(team => {
-                const option = document.createElement("option");
-                option.value = team.id;
-                option.textContent = team.name;
-                select.appendChild(option);
-            });
+
+        // Extract team_id from query string
+        function getTeamId() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get("team_id");
         }
-    
-        // Populate team dropdown in update form
-        function populateUpdateTeamSelect(selectedTeamId) {
-            const select = document.getElementById("edit-team");
-            select.innerHTML = "";
-            teamsCache.forEach(team => {
-                const option = document.createElement("option");
-                option.value = team.id;
-                option.textContent = team.name;
-                if (team.id === selectedTeamId) option.selected = true;
-                select.appendChild(option);
-            });
+
+        async function loadTeamName() {
+            const res = await fetch(`/teams/${teamId}`);
+            const team = await res.json();
+            teamName = team.name;
+
+            document.getElementById("team-title").textContent = `${team.name} Players`;
         }
-    
+
         async function loadPlayers() {
-            const res = await fetch("/players");
+            const res = await fetch(`/teams/${teamId}/players`);
             const players = await res.json();
-    
+
             const tbody = document.getElementById("players-body");
             tbody.innerHTML = "";
-    
+
             players.forEach(player => {
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                     <td>${player.id}</td>
                     <td>${player.name}</td>
-                    <td>${player.team_name}</td>
                     <td>${player.position || ""}</td>
                     <td><a href="player_stats_page?player_id=${player.id}">View Stats</a></td>
                     <td>
-                        <button onclick="editPlayer(${player.id}, '${player.name}', '${player.position || ""}', ${player.team_id})">Update</button>
+                        <button onclick="editPlayer(${player.id}, '${player.name}', '${player.position || ""}')">Update</button>
                         <button class="delete-btn" onclick="deletePlayer(${player.id})">Delete</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         }
-    
+
         async function addPlayer() {
             const name = document.getElementById("player-name").value;
             const position = document.getElementById("player-position").value.trim();
-            const team_id = document.getElementById("team-select").value;
-    
-            if (!name || !team_id) return alert("Please enter a name and select a team.");
-    
-            const payload = { name, team_id };
+
+            if (!name) return alert("Please enter a name.");
+
+            const payload = { name, team_id: teamId };
             if (position !== "") payload.position = position;
-    
+
             const res = await fetch("/players", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
-    
+
             if (res.ok) {
                 document.getElementById("player-name").value = "";
                 document.getElementById("player-position").value = "";
-                await loadPlayers();
+                loadPlayers();
             } else {
-                const data = await res.json();
-                alert("Error: " + data.error);
+                alert("Error adding player.");
             }
         }
-    
+
         async function deletePlayer(playerId) {
             if (!confirm("Delete this player?")) return;
-    
+
             const res = await fetch(`/players/${playerId}`, { method: "DELETE" });
-    
+
             if (res.ok) loadPlayers();
-            else alert("Error deleting player");
+            else alert("Error deleting player.");
         }
-    
-        // -----------------------
-        // UPDATE PLAYER FUNCTIONS
-        // -----------------------
-    
-        function editPlayer(id, name, position, team_id) {
+
+        // Update player
+        function editPlayer(id, name, position) {
             editingPlayerId = id;
-    
+
             document.getElementById("edit-name").value = name;
             document.getElementById("edit-position").value = position || "";
-            populateUpdateTeamSelect(team_id);
-    
+
             document.getElementById("update-form").style.display = "block";
             window.scrollTo(0, document.body.scrollHeight);
         }
-    
+
         function cancelUpdate() {
             editingPlayerId = null;
             document.getElementById("update-form").style.display = "none";
         }
-    
+
         async function submitUpdate() {
             if (!editingPlayerId) return;
-    
+
             const name = document.getElementById("edit-name").value.trim();
             const position = document.getElementById("edit-position").value.trim();
-            const team_id = document.getElementById("edit-team").value;
-    
+
             if (!name) return alert("Name cannot be empty.");
-    
-            const payload = { name, team_id };
+
+            const payload = { name, team_id: teamId };
             if (position !== "") payload.position = position;
-    
+
             const res = await fetch(`/players/${editingPlayerId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
-    
+
             if (res.ok) {
                 cancelUpdate();
-                await loadPlayers();
+                loadPlayers();
             } else {
                 alert("Error updating player.");
             }
         }
-    
-        loadTeams().then(loadPlayers);
+
+        // Initialize page
+        teamId = getTeamId();
+        if (!teamId) {
+            alert("No team_id provided in query.");
+        } else {
+            loadTeamName();
+            loadPlayers();
+        }
     </script>
-    
+
 </body>
 </html>
