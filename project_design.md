@@ -12,7 +12,20 @@ Goals:
 
 ---
 
+| Day   | Goal                                                                                                                                                  |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Day 1 | Set up Flask project structure, install dependencies, create database schema with `teams`, `players`, `games`, `player_stats`, and `combine_results`. |
+| Day 2 | Implement CRUD endpoints for teams, players, and games. Test using Postman or curl.                                                                   |
+| Day 3 | Add CRUD for player stats and combine results. Verify joins and aggregate queries.                                                                    |
+| Day 4 | Build basic HTML/JS dashboard to display teams, players, games, and stats.                                                                            |
+| Day 5 | Implement aggregated stats per player/game and simple filters. Clean up UI and test workflow.                                                         |
+| Day 6 | Optional: Add leaderboards, analytics, or advanced visualizations.                                                                                    |
+| Day 7 | Optional: Deploy locally or on free cloud service. Final testing and documentation.                                                                   |
+
+
 ## Initial Entity-Relationship Diagram (ERD)
+
+
 
 ```mermaid
 erDiagram
@@ -64,3 +77,13 @@ erDiagram
         REAL shuttle
         REAL three_cone
     }
+```
+```mermaid
+graph TD
+    A["Frontend HTML/JS"] --> B["Flask Backend Server"]
+    B --> C["Database (SQLite or PostgreSQL)"]
+    A -->|API Requests| B
+    B -->|SQL Queries and CRUD| C
+    B --> A
+
+```
