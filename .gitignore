@@ -4,3 +4,6 @@
 *.sqlite3
 *.db-journal
 *.sqlite-journal
+
+#Ignore .env
+.env
