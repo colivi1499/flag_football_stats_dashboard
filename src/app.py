@@ -1,7 +1,7 @@
 import sqlite3
 from flask import Flask, request, jsonify, render_template
-from auth import require_auth
-from database_sqlite import get_db, close_db, query_db
+from src.auth import require_auth
+from src.database_sqlite import get_db, close_db, query_db
 
 app = Flask(__name__)
 
