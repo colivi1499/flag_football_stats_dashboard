@@ -1,151 +1,175 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Teams</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 60%; margin: auto; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        h1, h2 { text-align: center; }
-        input, button { padding: 5px; font-size: 14px; }
-        button.delete-btn { color: white; background-color: red; border: none; cursor: pointer; padding: 4px 8px; }
-        #add-team-form { text-align: center; margin-bottom: 20px; }
-        #update-team-form { text-align: center; margin-top: 20px; display: none; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Teams</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+    header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+    h1 { margin:0; text-align:center; }
+    #add-team { text-align:center; margin:1rem; }
+    #add-team input, #add-team select { padding:0.5rem; margin-right:0.5rem; }
+    button { padding:0.4rem 0.8rem; border:none; border-radius:4px; cursor:pointer; }
+    button.update-btn { background:#facc15; color:black; }
+    button.delete-btn { background:red; color:white; }
+    table { border-collapse: collapse; width: 80%; margin:auto; margin-top:1rem; }
+    th, td { border:1px solid #ccc; padding:0.5rem; text-align:left; }
+    th { background:#f2f2f2; }
+    #update-form { display:none; text-align:center; margin-top:1rem; }
+    #update-form input, #update-form select { padding:0.5rem; margin-right:0.5rem; }
+  </style>
 </head>
 <body>
-    <h1>Teams</h1>
 
-    <!-- Add Team Form -->
-    <div id="add-team-form">
-        <input type="text" id="team-name" placeholder="Team Name">
-        <button id="add-team">Add Team</button>
-    </div>
+<header>
+  <h1>Teams</h1>
+</header>
 
-    <!-- Update Team Form (hidden at first) -->
-    <div id="update-team-form">
-        <h3>Edit Team</h3>
-        <input type="text" id="update-team-name">
-        <button onclick="submitUpdate()">Save</button>
-        <button onclick="cancelUpdate()">Cancel</button>
-    </div>
+<div id="add-team">
+  <input id="team-name" type="text" placeholder="Team Name" />
+  <select id="league-select"></select>
+  <button onclick="addTeam()">Add Team</button>
+  <div id="message" style="color:red; margin-top:0.5rem;"></div>
+</div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Players</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="team-body"></tbody>
-    </table>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>League</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="teams-body"></tbody>
+</table>
 
-    <script>
-        const teamBody = document.getElementById("team-body");
-        const teamNameInput = document.getElementById("team-name");
-        const addButton = document.getElementById("add-team");
+<div id="update-form">
+  <h3>Edit Team</h3>
+  <input id="edit-team-name" type="text" />
+  <select id="edit-league-select"></select>
+  <button onclick="submitUpdate()">Save</button>
+  <button onclick="cancelUpdate()">Cancel</button>
+</div>
 
-        let editingTeamId = null;
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-        // Load teams into table
-        async function loadTeams() {
-            const res = await fetch("/teams");
-            const teams = await res.json();
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const messageEl = document.getElementById("message");
+  let editingTeamId = null;
+  let leaguesCache = [];
 
-            teamBody.innerHTML = "";
-            teams.forEach(team => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                    <td>${team.id}</td>
-                    <td>${team.name}</td>
-                    <td>
-                        <a href="/team_players_page?team_id=${team.id}">Roster</a>
-                    </td>
-                    <td>
-                        <button onclick="startUpdate(${team.id}, '${team.name}')">Update</button>
-                        <button class="delete-btn" onclick="deleteTeam(${team.id}, '${team.name}')">Delete</button>
-                    </td>
-                `;
-                teamBody.appendChild(tr);
-            });
-        }
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) window.location.href = "login.html";
+  }
 
-        // Add a new team
-        addButton.addEventListener("click", async () => {
-            const name = teamNameInput.value.trim();
-            if (!name) return alert("Enter a team name");
+  async function loadLeagues() {
+    const { data, error } = await supabase.from('leagues').select('*').order('id');
+    if (error) return messageEl.textContent = error.message;
+    leaguesCache = data;
 
-            const res = await fetch("/teams", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name })
-            });
+    const leagueSelect = document.getElementById("league-select");
+    const editLeagueSelect = document.getElementById("edit-league-select");
+    leagueSelect.innerHTML = "";
+    editLeagueSelect.innerHTML = "";
+    data.forEach(league => {
+      const option1 = document.createElement("option");
+      option1.value = league.id;
+      option1.textContent = league.name;
+      leagueSelect.appendChild(option1);
 
-            if (res.ok) {
-                teamNameInput.value = "";
-                loadTeams();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to add team");
-            }
-        });
+      const option2 = document.createElement("option");
+      option2.value = league.id;
+      option2.textContent = league.name;
+      editLeagueSelect.appendChild(option2);
+    });
+  }
 
-        // Start Update Process
-        function startUpdate(id, name) {
-            editingTeamId = id;
-            document.getElementById("update-team-name").value = name;
+  async function loadTeams() {
+    const { data, error } = await supabase.from('teams').select('*, league_id, leagues(name)').order('id');
+    if (error) return messageEl.textContent = error.message;
 
-            document.getElementById("update-team-form").style.display = "block";
-            window.scrollTo(0, document.body.scrollHeight);
-        }
+    const tbody = document.getElementById("teams-body");
+    tbody.innerHTML = "";
 
-        // Cancel Update
-        function cancelUpdate() {
-            editingTeamId = null;
-            document.getElementById("update-team-form").style.display = "none";
-        }
+    data.forEach(team => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${team.id}</td>
+        <td>${team.name}</td>
+        <td>${leaguesCache.find(l => l.id === team.league_id)?.name || "N/A"}</td>
+        <td>
+          <button class="update-btn" onclick="editTeam(${team.id}, '${team.name}', ${team.league_id})">Edit</button>
+          <button class="delete-btn" onclick="deleteTeam(${team.id})">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
 
-        // Submit Update
-        async function submitUpdate() {
-            if (!editingTeamId) return;
+  async function addTeam() {
+    const name = document.getElementById("team-name").value.trim();
+    const league_id = document.getElementById("league-select").value;
+    if (!name || !league_id) return messageEl.textContent = "Enter a name and select a league.";
 
-            const name = document.getElementById("update-team-name").value.trim();
-            if (!name) return alert("Name cannot be empty.");
+    const { error } = await supabase.from('teams').insert([{ name, league_id }]);
+    if (error) messageEl.textContent = error.message;
+    else {
+      document.getElementById("team-name").value = "";
+      messageEl.textContent = "";
+      loadTeams();
+    }
+  }
 
-            const res = await fetch(`/teams/${editingTeamId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name })
-            });
+  function editTeam(id, name, league_id) {
+    editingTeamId = id;
+    document.getElementById("edit-team-name").value = name;
+    document.getElementById("edit-league-select").value = league_id;
+    document.getElementById("update-form").style.display = "block";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
 
-            if (res.ok) {
-                cancelUpdate();
-                loadTeams();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to update team");
-            }
-        }
+  function cancelUpdate() {
+    editingTeamId = null;
+    document.getElementById("update-form").style.display = "none";
+  }
 
-        // Delete a team
-        async function deleteTeam(teamId, teamName) {
-            if (!confirm(`Delete team "${teamName}"?`)) return;
+  async function submitUpdate() {
+    if (!editingTeamId) return;
+    const name = document.getElementById("edit-team-name").value.trim();
+    const league_id = document.getElementById("edit-league-select").value;
+    if (!name || !league_id) return alert("Name and league required.");
 
-            const res = await fetch(`/teams/${teamId}`, { method: "DELETE" });
-            if (res.ok) {
-                loadTeams();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to delete team");
-            }
-        }
+    const { error } = await supabase.from('teams').update({ name, league_id }).eq('id', editingTeamId);
+    if (error) alert(error.message);
+    else {
+      cancelUpdate();
+      loadTeams();
+    }
+  }
 
-        // Initial load
-        loadTeams();
-    </script>
+  async function deleteTeam(id) {
+    if (!confirm("Delete this team?")) return;
+    const { error } = await supabase.from('teams').delete().eq('id', id);
+    if (error) alert(error.message);
+    else loadTeams();
+  }
+
+  window.addTeam = addTeam;
+  window.editTeam = editTeam;
+  window.cancelUpdate = cancelUpdate;
+  window.submitUpdate = submitUpdate;
+  window.deleteTeam = deleteTeam;
+
+  checkAuth().then(async () => {
+    await loadLeagues();
+    loadTeams();
+  });
+</script>
+
 </body>
 </html>

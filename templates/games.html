@@ -1,141 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Games</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 80%; margin: auto; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        h1 { text-align: center; }
-        input, select, button { padding: 5px; margin: 5px; font-size: 14px; }
-        button.delete-btn { color: white; background-color: red; border: none; cursor: pointer; }
-        #add-game-form { text-align: center; margin-bottom: 20px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Games</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+    header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+    h1 { margin:0; text-align:center; }
+    #league-select-container { text-align:center; margin:1rem; }
+    select, input { padding:0.5rem; margin:0.2rem; }
+    table { border-collapse: collapse; width: 90%; margin:auto; margin-top:1rem; }
+    th, td { border:1px solid #ccc; padding:0.5rem; text-align:center; }
+    th { background:#f2f2f2; }
+    button { padding:0.3rem 0.5rem; cursor:pointer; }
+    .delete-btn { background:red; color:white; border:none; }
+    #message { color:red; text-align:center; margin-top:0.5rem; }
+    #add-game-form { text-align:center; margin-top:1rem; }
+  </style>
 </head>
 <body>
-    <h1>Games</h1>
 
-    <div id="add-game-form">
-        <input type="date" id="game-date" required>
-        <select id="home-team"></select>
-        <select id="away-team"></select>
-        <input type="text" id="game-result" placeholder="Result (optional)">
-        <button onclick="addGame()">Add Game</button>
-    </div>
+<header>
+  <h1>Games</h1>
+</header>
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Date</th>
-                <th>Home Team</th>
-                <th>Away Team</th>
-                <th>Result</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="games-body"></tbody>
-    </table>
+<div id="league-select-container">
+  <label for="league-select">Select League:</label>
+  <select id="league-select" onchange="loadGames()"></select>
+  <div id="message"></div>
+</div>
 
-    <script>
-        const gamesBody = document.getElementById("games-body");
-        const homeSelect = document.getElementById("home-team");
-        const awaySelect = document.getElementById("away-team");
-        const dateInput = document.getElementById("game-date");
-        const resultInput = document.getElementById("game-result");
+<div id="add-game-form">
+  <input type="date" id="game-date" />
+  <select id="home-team"></select>
+  <select id="away-team"></select>
+  <input type="text" id="game-result" placeholder="Result (optional)" />
+  <button onclick="addGame()">Add Game</button>
+</div>
 
-        let teams = [];
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Date</th>
+      <th>Home Team</th>
+      <th>Away Team</th>
+      <th>Result</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="games-body"></tbody>
+</table>
 
-        // Load teams into dropdowns
-        async function loadTeams() {
-            const res = await fetch("/teams");
-            teams = await res.json();
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+  
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const messageEl = document.getElementById("message");
+  let teamsCache = [];
 
-            homeSelect.innerHTML = "";
-            awaySelect.innerHTML = "";
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) window.location.href = "login.html";
+  }
 
-            teams.forEach(team => {
-                const homeOption = document.createElement("option");
-                homeOption.value = team.id;
-                homeOption.textContent = team.name;
-                homeSelect.appendChild(homeOption);
+  async function loadLeagues() {
+    const { data, error } = await supabase
+      .from('leagues')
+      .select('id,name')
+      .order('name');
 
-                const awayOption = document.createElement("option");
-                awayOption.value = team.id;
-                awayOption.textContent = team.name;
-                awaySelect.appendChild(awayOption);
-            });
-        }
+    if (error) return messageEl.textContent = error.message;
 
-        // Load games table
-        async function loadGames() {
-            const res = await fetch("/games");
-            const games = await res.json();
+    const select = document.getElementById("league-select");
+    select.innerHTML = "";
+    data.forEach(league => {
+      const option = document.createElement("option");
+      option.value = league.id;
+      option.textContent = league.name;
+      select.appendChild(option);
+    });
 
-            gamesBody.innerHTML = "";
-            games.forEach(game => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                    <td>${game.id}</td>
-                    <td>${game.date}</td>
-                    <td>${game.home_team}</td>
-                    <td>${game.away_team}</td>
-                    <td>${game.result || ""}</td>
-                    <td>
-                        <button class="delete-btn" onclick="deleteGame(${game.id})">Delete</button>
-                    </td>
-                `;
-                gamesBody.appendChild(tr);
-            });
-        }
+    if (data.length > 0) {
+      await loadTeams(data[0].id);
+      loadGames();
+    }
+  }
 
-        // Add a new game
-        async function addGame() {
-            const date = dateInput.value;
-            const home_team_id = homeSelect.value;
-            const away_team_id = awaySelect.value;
-            const result = resultInput.value.trim();
+  async function loadTeams(leagueId) {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('league_id', leagueId)
+      .order('name');
 
-            if (!date || !home_team_id || !away_team_id) {
-                return alert("Date, home team, and away team are required.");
-            }
-            if (home_team_id === away_team_id) {
-                return alert("Home team and away team must be different.");
-            }
+    if (error) return messageEl.textContent = error.message;
 
-            const res = await fetch("/games", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ date, home_team_id, away_team_id, result })
-            });
+    teamsCache = data;
 
-            if (res.ok) {
-                dateInput.value = "";
-                resultInput.value = "";
-                loadGames();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to add game");
-            }
-        }
+    const homeSelect = document.getElementById("home-team");
+    const awaySelect = document.getElementById("away-team");
+    homeSelect.innerHTML = awaySelect.innerHTML = "";
+    data.forEach(team => {
+      const option1 = document.createElement("option");
+      option1.value = team.id;
+      option1.textContent = team.name;
+      homeSelect.appendChild(option1);
 
-        // Delete a game
-        async function deleteGame(gameId) {
-            if (!confirm("Delete this game?")) return;
+      const option2 = document.createElement("option");
+      option2.value = team.id;
+      option2.textContent = team.name;
+      awaySelect.appendChild(option2);
+    });
+  }
 
-            const res = await fetch(`/games/${gameId}`, { method: "DELETE" });
-            if (res.ok) {
-                loadGames();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to delete game");
-            }
-        }
+  async function loadGames() {
+    const leagueId = document.getElementById("league-select").value;
+    if (!leagueId) return;
 
-        // Initialize page
-        loadTeams().then(loadGames);
-    </script>
+    await loadTeams(leagueId);
+
+    const { data, error } = await supabase
+      .from('games')
+      .select('*, home_team:home_team_id(name), away_team:away_team_id(name)')
+      .eq('league_id', leagueId)
+      .order('date', { ascending: false });
+
+    if (error) return messageEl.textContent = error.message;
+
+    const tbody = document.getElementById("games-body");
+    tbody.innerHTML = "";
+
+    data.forEach(game => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${game.id}</td>
+        <td>${game.date}</td>
+        <td>${game.home_team.name}</td>
+        <td>${game.away_team.name}</td>
+        <td>${game.result || ''}</td>
+        <td>
+          <button onclick="deleteGame(${game.id})" class="delete-btn">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function addGame() {
+    const leagueId = document.getElementById("league-select").value;
+    const date = document.getElementById("game-date").value;
+    const homeTeamId = document.getElementById("home-team").value;
+    const awayTeamId = document.getElementById("away-team").value;
+    const result = document.getElementById("game-result").value.trim();
+
+    if (!date || !homeTeamId || !awayTeamId) return alert("Please fill all fields.");
+
+    if (homeTeamId === awayTeamId) return alert("Home and Away teams must be different.");
+
+    const payload = { date, home_team_id: homeTeamId, away_team_id: awayTeamId, league_id: leagueId };
+    if (result) payload.result = result;
+
+    const { error } = await supabase.from('games').insert(payload);
+    if (error) return messageEl.textContent = error.message;
+
+    document.getElementById("game-date").value = "";
+    document.getElementById("game-result").value = "";
+    loadGames();
+  }
+
+  async function deleteGame(gameId) {
+    if (!confirm("Delete this game?")) return;
+
+    const { error } = await supabase.from('games').delete().eq('id', gameId);
+    if (error) return messageEl.textContent = error.message;
+
+    loadGames();
+  }
+
+  window.onload = async () => {
+    await checkAuth();
+    await loadLeagues();
+  };
+</script>
+
 </body>
 </html>

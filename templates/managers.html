@@ -2,52 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Aggregated Stats</title>
+  <title>League Managers</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
     header { background:#2563eb; color:white; padding:1rem; text-align:center; }
     h1 { margin:0; text-align:center; }
     #league-select-container { text-align:center; margin:1rem; }
-    select { padding:0.5rem; }
+    select, input { padding:0.5rem; margin:0.2rem; }
     table { border-collapse: collapse; width: 90%; margin:auto; margin-top:1rem; }
     th, td { border:1px solid #ccc; padding:0.5rem; text-align:center; }
     th { background:#f2f2f2; }
+    button { padding:0.3rem 0.5rem; cursor:pointer; }
+    .delete-btn { background:red; color:white; border:none; }
     #message { color:red; text-align:center; margin-top:0.5rem; }
+    #add-manager-form { text-align:center; margin-top:1rem; }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>Aggregated Stats</h1>
+  <h1>League Managers</h1>
 </header>
 
 <div id="league-select-container">
   <label for="league-select">Select League:</label>
-  <select id="league-select" onchange="loadAggregatedStats()"></select>
+  <select id="league-select" onchange="loadManagers()"></select>
   <div id="message"></div>
+</div>
+
+<div id="add-manager-form">
+  <input type="text" id="new-manager-id" placeholder="User ID of manager" />
+  <button onclick="addManager()">Add Manager</button>
 </div>
 
 <table>
   <thead>
     <tr>
-      <th>Player</th>
-      <th>Team</th>
-      <th>Touchdowns</th>
-      <th>Receptions</th>
-      <th>Yards</th>
-      <th>Interceptions</th>
-      <th>Sacks</th>
-      <th>Flags Pulled</th>
+      <th>User ID</th>
+      <th>Role</th>
+      <th>Actions</th>
     </tr>
   </thead>
-  <tbody id="stats-body"></tbody>
+  <tbody id="managers-body"></tbody>
 </table>
 
 <script type="module">
   import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
   import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-  
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const messageEl = document.getElementById("message");
 
@@ -73,62 +76,72 @@
       select.appendChild(option);
     });
 
-    if (data.length > 0) loadAggregatedStats();
+    if (data.length > 0) loadManagers();
   }
 
-  async function loadAggregatedStats() {
+  async function loadManagers() {
     const leagueId = document.getElementById("league-select").value;
     if (!leagueId) return;
 
     const { data, error } = await supabase
-      .from('player_stats')
-      .select(`
-        player_id,
-        players!inner(name, team_id, teams!inner(name))
-      `)
+      .from('league_managers')
+      .select('*')
       .eq('league_id', leagueId);
 
     if (error) return messageEl.textContent = error.message;
 
-    // Aggregate stats per player
-    const statsMap = {};
-    data.forEach(row => {
-      const playerName = row.players.name;
-      const teamName = row.players.teams.name;
-      if (!statsMap[playerName]) {
-        statsMap[playerName] = { team: teamName, touchdowns:0, receptions:0, yards:0, interceptions:0, sacks:0, flags_pulled:0 };
-      }
-      statsMap[playerName].touchdowns += row.touchdowns || 0;
-      statsMap[playerName].receptions += row.receptions || 0;
-      statsMap[playerName].yards += row.yards || 0;
-      statsMap[playerName].interceptions += row.interceptions || 0;
-      statsMap[playerName].sacks += row.sacks || 0;
-      statsMap[playerName].flags_pulled += row.flags_pulled || 0;
-    });
-
-    const tbody = document.getElementById("stats-body");
+    const tbody = document.getElementById("managers-body");
     tbody.innerHTML = "";
-    for (const player in statsMap) {
-      const s = statsMap[player];
+
+    data.forEach(manager => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${player}</td>
-        <td>${s.team}</td>
-        <td>${s.touchdowns}</td>
-        <td>${s.receptions}</td>
-        <td>${s.yards}</td>
-        <td>${s.interceptions}</td>
-        <td>${s.sacks}</td>
-        <td>${s.flags_pulled}</td>
+        <td>${manager.user_id}</td>
+        <td>${manager.role}</td>
+        <td>
+          <button onclick="deleteManager('${manager.user_id}', ${leagueId})" class="delete-btn">Remove</button>
+        </td>
       `;
       tbody.appendChild(tr);
-    }
+    });
+  }
+
+  async function addManager() {
+    const leagueId = document.getElementById("league-select").value;
+    const userId = document.getElementById("new-manager-id").value.trim();
+    if (!userId || !leagueId) return alert("Enter a valid User ID and select a league.");
+
+    const { error } = await supabase
+      .from('league_managers')
+      .insert({ league_id: leagueId, user_id: userId });
+
+    if (error) return messageEl.textContent = error.message;
+
+    document.getElementById("new-manager-id").value = "";
+    loadManagers();
+  }
+
+  async function deleteManager(userId, leagueId) {
+    if (!confirm("Remove this manager?")) return;
+
+    const { error } = await supabase
+      .from('league_managers')
+      .delete()
+      .match({ league_id: leagueId, user_id: userId });
+
+    if (error) return messageEl.textContent = error.message;
+
+    loadManagers();
   }
 
   window.onload = async () => {
     await checkAuth();
     await loadLeagues();
   };
+
+  window.loadManagers = loadManagers;
+  window.addManager = addManager;
+  window.deleteManager = deleteManager;
 </script>
 
 </body>

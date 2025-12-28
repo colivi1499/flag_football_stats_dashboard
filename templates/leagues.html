@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Leagues</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+    header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+    h1 { margin:0; text-align:center; }
+    #add-league { text-align:center; margin:1rem; }
+    #add-league input { padding:0.5rem; margin-right:0.5rem; }
+    button { padding:0.4rem 0.8rem; border:none; border-radius:4px; cursor:pointer; }
+    button.update-btn { background:#facc15; color:black; }
+    button.delete-btn { background:red; color:white; }
+    table { border-collapse: collapse; width: 80%; margin:auto; margin-top:1rem; }
+    th, td { border:1px solid #ccc; padding:0.5rem; text-align:left; }
+    th { background:#f2f2f2; }
+    #update-form { display:none; text-align:center; margin-top:1rem; }
+    #update-form input { padding:0.5rem; margin-right:0.5rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Leagues</h1>
+</header>
+
+<div id="add-league">
+  <input id="league-name" type="text" placeholder="New League Name" />
+  <button onclick="addLeague()">Add League</button>
+  <div id="message" style="color:red; margin-top:0.5rem;"></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Created By</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="leagues-body"></tbody>
+</table>
+
+<div id="update-form">
+  <h3>Edit League</h3>
+  <input id="edit-league-name" type="text" />
+  <button onclick="submitUpdate()">Save</button>
+  <button onclick="cancelUpdate()">Cancel</button>
+</div>
+
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const messageEl = document.getElementById("message");
+  let editingLeagueId = null;
+
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) window.location.href = "login.html";
+  }
+
+  async function loadLeagues() {
+    const { data, error } = await supabase.from('leagues').select('*').order('id');
+    if (error) return messageEl.textContent = error.message;
+
+    const tbody = document.getElementById("leagues-body");
+    tbody.innerHTML = "";
+
+    data.forEach(league => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${league.id}</td>
+        <td>${league.name}</td>
+        <td>${league.created_by || "N/A"}</td>
+        <td>${new Date(league.created_at).toLocaleString()}</td>
+        <td>
+          <button class="update-btn" onclick="editLeague(${league.id}, '${league.name}')">Edit</button>
+          <button class="delete-btn" onclick="deleteLeague(${league.id})">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function addLeague() {
+    const name = document.getElementById("league-name").value.trim();
+    if (!name) return messageEl.textContent = "Please enter a league name.";
+
+    const { data, error } = await supabase.from('leagues').insert([{ name }]).select();
+    if (error) messageEl.textContent = error.message;
+    else {
+      document.getElementById("league-name").value = "";
+      messageEl.textContent = "";
+      loadLeagues();
+    }
+  }
+
+  function editLeague(id, name) {
+    editingLeagueId = id;
+    document.getElementById("edit-league-name").value = name;
+    document.getElementById("update-form").style.display = "block";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function cancelUpdate() {
+    editingLeagueId = null;
+    document.getElementById("update-form").style.display = "none";
+  }
+
+  async function submitUpdate() {
+    if (!editingLeagueId) return;
+
+    const name = document.getElementById("edit-league-name").value.trim();
+    if (!name) return alert("Name cannot be empty.");
+
+    const { data, error } = await supabase.from('leagues')
+      .update({ name })
+      .eq('id', editingLeagueId);
+
+    if (error) alert(error.message);
+    else {
+      cancelUpdate();
+      loadLeagues();
+    }
+  }
+
+  async function deleteLeague(id) {
+    if (!confirm("Delete this league?")) return;
+    const { error } = await supabase.from('leagues').delete().eq('id', id);
+    if (error) alert(error.message);
+    else loadLeagues();
+  }
+
+  window.addLeague = addLeague;
+  window.editLeague = editLeague;
+  window.cancelUpdate = cancelUpdate;
+  window.submitUpdate = submitUpdate;
+  window.deleteLeague = deleteLeague;
+
+  checkAuth().then(loadLeagues);
+</script>
+
+</body>
+</html>

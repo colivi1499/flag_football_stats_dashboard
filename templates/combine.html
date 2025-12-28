@@ -1,149 +1,195 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Combine Results</title>
-    <style>
-        table { border-collapse: collapse; width: 90%; margin: auto; }
-        th, td { border: 1px solid #ddd; padding: 8px; cursor: pointer; }
-        th { background: #f2f2f2; }
-        h1 { text-align: center; }
-        #add-form { text-align: center; margin-bottom: 20px; }
-        input, select { padding: 5px; margin: 3px; }
-        button { padding: 5px 8px; cursor: pointer; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Combine Results</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+    header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+    h1 { margin:0; text-align:center; }
+    #add-combine { text-align:center; margin:1rem; }
+    #add-combine input { padding:0.5rem; margin-right:0.5rem; width:90px; }
+    button { padding:0.4rem 0.8rem; border:none; border-radius:4px; cursor:pointer; }
+    button.update-btn { background:#facc15; color:black; }
+    button.delete-btn { background:red; color:white; }
+    table { border-collapse: collapse; width: 90%; margin:auto; margin-top:1rem; }
+    th, td { border:1px solid #ccc; padding:0.5rem; text-align:center; }
+    th { background:#f2f2f2; }
+    #update-form { display:none; text-align:center; margin-top:1rem; }
+    #update-form input { padding:0.5rem; margin-right:0.5rem; width:90px; }
+    #message { color:red; text-align:center; margin-top:0.5rem; }
+  </style>
 </head>
 <body>
 
-<h1>Combine Results</h1>
+<header>
+  <h1 id="player-name-header">Combine Results</h1>
+</header>
 
-<div id="add-form">
-    <select id="player-select"></select>
-    <input type="number" step="0.01" id="forty" placeholder="40 Yard Dash">
-    <input type="number" id="bench" placeholder="Bench Reps">
-    <input type="number" step="0.01" id="vertical" placeholder="Vertical Jump (in)">
-    <input type="number" step="0.01" id="broad" placeholder="Broad Jump (in)">
-    <input type="number" step="0.01" id="shuttle" placeholder="Shuttle">
-    <input type="number" step="0.01" id="cone" placeholder="3-Cone Drill">
-    <button onclick="addResult()">Add Result</button>
+<div id="add-combine">
+  <input type="number" step="0.01" id="forty_yard" placeholder="40 Yard" />
+  <input type="number" id="bench_reps" placeholder="Bench Reps" />
+  <input type="number" step="0.01" id="vertical" placeholder="Vertical" />
+  <input type="number" step="0.01" id="broad_jump" placeholder="Broad Jump" />
+  <input type="number" step="0.01" id="shuttle" placeholder="Shuttle" />
+  <input type="number" step="0.01" id="three_cone" placeholder="3 Cone" />
+  <button onclick="addCombine()">Add Combine</button>
+  <div id="message"></div>
 </div>
 
-<table id="combine-table">
-    <thead>
-        <tr>
-            <th onclick="sortTable(0)">Player</th>
-            <th onclick="sortTable(1)">40 yd</th>
-            <th onclick="sortTable(2)">Bench</th>
-            <th onclick="sortTable(3)">Vertical</th>
-            <th onclick="sortTable(4)">Broad</th>
-            <th onclick="sortTable(5)">Shuttle</th>
-            <th onclick="sortTable(6)">3-Cone</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody id="results-body"></tbody>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>40 Yard</th>
+      <th>Bench</th>
+      <th>Vertical</th>
+      <th>Broad</th>
+      <th>Shuttle</th>
+      <th>3 Cone</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="combine-body"></tbody>
 </table>
 
-<script>
-let currentSortColumn = -1;
-let currentSortDirection = 1; // 1 = ascending, -1 = descending
+<div id="update-form">
+  <h3>Edit Combine</h3>
+  <input type="number" step="0.01" id="edit-forty_yard" placeholder="40 Yard" />
+  <input type="number" id="edit-bench_reps" placeholder="Bench Reps" />
+  <input type="number" step="0.01" id="edit-vertical" placeholder="Vertical" />
+  <input type="number" step="0.01" id="edit-broad_jump" placeholder="Broad Jump" />
+  <input type="number" step="0.01" id="edit-shuttle" placeholder="Shuttle" />
+  <input type="number" step="0.01" id="edit-three_cone" placeholder="3 Cone" />
+  <button onclick="submitUpdate()">Save</button>
+  <button onclick="cancelUpdate()">Cancel</button>
+</div>
 
-async function loadPlayers() {
-    const res = await fetch("/players");
-    const players = await res.json();
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+  
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const messageEl = document.getElementById("message");
+  let combineCache = [];
+  let editingId = null;
+  const playerId = new URLSearchParams(window.location.search).get('player_id');
 
-    const select = document.getElementById("player-select");
-    select.innerHTML = "";
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) window.location.href = "login.html";
+  }
 
-    players.forEach(p => {
-        const option = document.createElement("option");
-        option.value = p.id;
-        option.textContent = p.name;
-        select.appendChild(option);
-    });
-}
+  async function loadPlayerName() {
+    const { data, error } = await supabase.from('players').select('name').eq('id', playerId).single();
+    if (error) return messageEl.textContent = error.message;
+    document.getElementById('player-name-header').textContent = data.name + ' Combine Results';
+  }
 
-async function loadResults() {
-    const res = await fetch("/combine");
-    const results = await res.json();
+  async function loadCombine() {
+    const { data, error } = await supabase.from('combine_results')
+      .select('*')
+      .eq('player_id', playerId)
+      .order('id', { ascending: true });
+    if (error) return messageEl.textContent = error.message;
 
-    const tbody = document.getElementById("results-body");
+    combineCache = data;
+    const tbody = document.getElementById("combine-body");
     tbody.innerHTML = "";
-
-    results.forEach(r => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${r.name}</td>
-            <td>${r.forty_yard || ""}</td>
-            <td>${r.bench_reps || ""}</td>
-            <td>${r.vertical || ""}</td>
-            <td>${r.broad_jump || ""}</td>
-            <td>${r.shuttle || ""}</td>
-            <td>${r.three_cone || ""}</td>
-            <td><button onclick="deleteResult(${r.id})">Delete</button></td>
-        `;
-        tbody.appendChild(tr);
+    data.forEach(row => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.id}</td>
+        <td>${row.forty_yard}</td>
+        <td>${row.bench_reps}</td>
+        <td>${row.vertical}</td>
+        <td>${row.broad_jump}</td>
+        <td>${row.shuttle}</td>
+        <td>${row.three_cone}</td>
+        <td>
+          <button class="update-btn" onclick="editCombine(${row.id})">Edit</button>
+          <button class="delete-btn" onclick="deleteCombine(${row.id})">Delete</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
     });
-}
+  }
 
-async function addResult() {
+  async function addCombine() {
     const payload = {
-        player_id: document.getElementById("player-select").value,
-        forty_yard: document.getElementById("forty").value || null,
-        bench_reps: document.getElementById("bench").value || null,
-        vertical: document.getElementById("vertical").value || null,
-        broad_jump: document.getElementById("broad").value || null,
-        shuttle: document.getElementById("shuttle").value || null,
-        three_cone: document.getElementById("cone").value || null
+      player_id: playerId,
+      forty_yard: parseFloat(document.getElementById('forty_yard').value) || null,
+      bench_reps: parseInt(document.getElementById('bench_reps').value) || null,
+      vertical: parseFloat(document.getElementById('vertical').value) || null,
+      broad_jump: parseFloat(document.getElementById('broad_jump').value) || null,
+      shuttle: parseFloat(document.getElementById('shuttle').value) || null,
+      three_cone: parseFloat(document.getElementById('three_cone').value) || null
     };
 
-    await fetch("/combine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    });
-
-    loadResults();
-}
-
-async function deleteResult(id) {
-    await fetch(`/combine/${id}`, { method: "DELETE" });
-    loadResults();
-}
-
-// -----------------------
-// SORTING FUNCTION
-// -----------------------
-function sortTable(colIndex) {
-    const table = document.getElementById("combine-table");
-    const tbody = table.tBodies[0];
-    const rows = Array.from(tbody.querySelectorAll("tr"));
-
-    if (currentSortColumn === colIndex) {
-        currentSortDirection *= -1; // Toggle direction if same column
-    } else {
-        currentSortColumn = colIndex;
-        currentSortDirection = 1; // Reset to ascending for new column
+    const { error } = await supabase.from('combine_results').insert([payload]);
+    if (error) messageEl.textContent = error.message;
+    else {
+      ['forty_yard','bench_reps','vertical','broad_jump','shuttle','three_cone'].forEach(id => document.getElementById(id).value = '');
+      messageEl.textContent = '';
+      loadCombine();
     }
+  }
 
-    rows.sort((a, b) => {
-        const aText = a.children[colIndex].innerText.trim();
-        const bText = b.children[colIndex].innerText.trim();
+  function editCombine(id) {
+    editingId = id;
+    const row = combineCache.find(r => r.id === id);
+    document.getElementById('edit-forty_yard').value = row.forty_yard || '';
+    document.getElementById('edit-bench_reps').value = row.bench_reps || '';
+    document.getElementById('edit-vertical').value = row.vertical || '';
+    document.getElementById('edit-broad_jump').value = row.broad_jump || '';
+    document.getElementById('edit-shuttle').value = row.shuttle || '';
+    document.getElementById('edit-three_cone').value = row.three_cone || '';
+    document.getElementById('update-form').style.display = "block";
+    window.scrollTo(0, document.body.scrollHeight);
+  }
 
-        const aNum = parseFloat(aText);
-        const bNum = parseFloat(bText);
+  function cancelUpdate() {
+    editingId = null;
+    document.getElementById('update-form').style.display = "none";
+  }
 
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-            return (aNum - bNum) * currentSortDirection;
-        }
+  async function submitUpdate() {
+    if (!editingId) return;
+    const payload = {
+      forty_yard: parseFloat(document.getElementById('edit-forty_yard').value) || null,
+      bench_reps: parseInt(document.getElementById('edit-bench_reps').value) || null,
+      vertical: parseFloat(document.getElementById('edit-vertical').value) || null,
+      broad_jump: parseFloat(document.getElementById('edit-broad_jump').value) || null,
+      shuttle: parseFloat(document.getElementById('edit-shuttle').value) || null,
+      three_cone: parseFloat(document.getElementById('edit-three_cone').value) || null
+    };
 
-        return aText.localeCompare(bText) * currentSortDirection;
-    });
+    const { error } = await supabase.from('combine_results').update(payload).eq('id', editingId);
+    if (error) alert(error.message);
+    else {
+      cancelUpdate();
+      loadCombine();
+    }
+  }
 
-    rows.forEach(row => tbody.appendChild(row));
-}
+  async function deleteCombine(id) {
+    if (!confirm("Delete this combine result?")) return;
+    const { error } = await supabase.from('combine_results').delete().eq('id', id);
+    if (error) alert(error.message);
+    else loadCombine();
+  }
 
-loadPlayers();
-loadResults();
+  window.addCombine = addCombine;
+  window.editCombine = editCombine;
+  window.cancelUpdate = cancelUpdate;
+  window.submitUpdate = submitUpdate;
+  window.deleteCombine = deleteCombine;
+
+  checkAuth().then(() => {
+    loadPlayerName();
+    loadCombine();
+  });
 </script>
 
 </body>

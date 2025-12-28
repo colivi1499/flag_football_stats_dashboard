@@ -1,16 +1,67 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Flag Football Dashboard</title>
+  <meta charset="UTF-8">
+  <title>Flag Football Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+    header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+    h1 { margin:0; }
+    nav { display:flex; flex-wrap:wrap; justify-content:center; padding:1rem; background:#f0f0f0; }
+    nav a { margin:0.5rem; padding:0.5rem 1rem; background:#16a34a; color:white; text-decoration:none; border-radius:4px; }
+    nav a:hover { background:#138f3f; }
+    #welcome { text-align:center; margin:2rem 0; font-size:1.2rem; }
+    button.logout-btn { display:block; margin:1rem auto; padding:0.6rem 1rem; background:red; color:white; border:none; border-radius:4px; cursor:pointer; }
+  </style>
 </head>
 <body>
-    <h1>Flag Football Stats</h1>
-    <ul>
-        <li><a href="{{ url_for('players_page') }}">View Players</a></li>
-        <li><a href="{{ url_for('teams_page') }}">View Teams</a></li>
-        <li><a href="{{ url_for('games_page') }}">View Games</a></li>
-        <li><a href="{{ url_for('aggregated_stats_page') }}">View Player Stats</a></li>
-        <li><a href="{{ url_for('combine_page') }}">View Combine Results</a></li>
-    </ul>
+
+<header>
+  <h1>Flag Football Dashboard</h1>
+</header>
+
+<div id="welcome">Loading...</div>
+
+<nav>
+  <a href="leagues.html">Leagues</a>
+  <a href="teams.html">Teams</a>
+  <a href="players.html">Players</a>
+  <a href="games.html">Games</a>
+  <a href="player_stats.html">Player Stats</a>
+  <a href="combine.html">Combine Results</a>
+  <a href="managers.html">Managers</a>
+</nav>
+
+<button class="logout-btn" onclick="logout()">Logout</button>
+
+<script type="module">
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const welcomeEl = document.getElementById("welcome");
+
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = "login.html";
+    } else {
+      welcomeEl.textContent = `Welcome, ${session.user.email}!`;
+    }
+  }
+
+  async function logout() {
+    const { error } = await supabase.auth.signOut();
+    if (error) alert(error.message);
+    else window.location.href = "login.html";
+  }
+
+  // Expose logout to global scope
+  window.logout = logout;
+
+  checkAuth();
+</script>
+
 </body>
 </html>
