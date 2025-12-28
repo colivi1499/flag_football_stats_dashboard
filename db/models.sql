@@ -11,7 +11,7 @@ DROP TABLE IF EXISTS leagues;
 CREATE TABLE leagues (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
-  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz DEFAULT now()
 );
 
