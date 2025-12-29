@@ -18,7 +18,7 @@
     th { background:#f2f2f2; }
     #update-form { display:none; text-align:center; margin-top:1rem; }
     #update-form input, #update-form select { padding:0.5rem; margin-right:0.5rem; }
-    a { color:#2563eb; text-decoration:none; }
+    a { color:#2563eb; text-decoration:none; margin-right:0.5rem; }
   </style>
 </head>
 <body>
@@ -44,6 +44,7 @@
       <th>League</th>
       <th>Position</th>
       <th>Stats</th>
+      <th>Combine</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -98,7 +99,7 @@
   async function loadPlayers() {
     const { data, error } = await supabase
       .from('players')
-      .select('*, team_id, teams(name, league_id), leagues(name)')
+      .select('*, team_id, teams(name, league_id)')
       .order('id');
     if (error) return messageEl.textContent = error.message;
 
@@ -107,8 +108,9 @@
 
     data.forEach(player => {
       const tr = document.createElement("tr");
-      const teamName = teamsCache.find(t => t.id === player.team_id)?.name || "N/A";
-      const leagueName = teamsCache.find(t => t.id === player.team_id)?.league_id || "N/A";
+      const team = teamsCache.find(t => t.id === player.team_id);
+      const teamName = team?.name || "N/A";
+      const leagueName = team?.league_id || "N/A";
       tr.innerHTML = `
         <td>${player.id}</td>
         <td>${player.name}</td>
@@ -116,6 +118,7 @@
         <td>${leagueName}</td>
         <td>${player.position || ""}</td>
         <td><a href="player_stats.html?player_id=${player.id}">View Stats</a></td>
+        <td><a href="combine.html?player_id=${player.id}">View Combine</a></td>
         <td>
           <button class="update-btn" onclick="editPlayer(${player.id}, '${player.name}', '${player.position || ""}', ${player.team_id})">Edit</button>
           <button class="delete-btn" onclick="deletePlayer(${player.id})">Delete</button>

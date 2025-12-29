@@ -17,7 +17,7 @@
     th, td { border:1px solid #ccc; padding:0.5rem; text-align:center; }
     th { background:#f2f2f2; }
     #update-form { display:none; text-align:center; margin-top:1rem; }
-    #update-form input { padding:0.5rem; margin-right:0.5rem; width:90px; }
+    #update-form input, #update-form select { padding:0.5rem; margin-right:0.5rem; width:90px; }
     #message { color:red; text-align:center; margin-top:0.5rem; }
   </style>
 </head>
@@ -28,6 +28,7 @@
 </header>
 
 <div id="add-stats">
+  <select id="game-select"></select>
   <input type="number" id="touchdowns" placeholder="TDs" min="0"/>
   <input type="number" id="receptions" placeholder="Receptions" min="0"/>
   <input type="number" id="yards" placeholder="Yards" min="0"/>
@@ -42,7 +43,7 @@
   <thead>
     <tr>
       <th>ID</th>
-      <th>Game Date</th>
+      <th>Game</th>
       <th>TDs</th>
       <th>Receptions</th>
       <th>Yards</th>
@@ -57,6 +58,7 @@
 
 <div id="update-form">
   <h3>Edit Stats</h3>
+  <select id="edit-game-select"></select>
   <input type="number" id="edit-touchdowns" placeholder="TDs" min="0"/>
   <input type="number" id="edit-receptions" placeholder="Receptions" min="0"/>
   <input type="number" id="edit-yards" placeholder="Yards" min="0"/>
@@ -70,12 +72,13 @@
 <script type="module">
   import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
   import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-  
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const messageEl = document.getElementById("message");
   let statsCache = [];
   let editingStatId = null;
-  let playerId = new URLSearchParams(window.location.search).get('player_id');
+  const playerId = new URLSearchParams(window.location.search).get('player_id');
+  let playerTeamId = null;
 
   async function checkAuth() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -83,15 +86,50 @@
   }
 
   async function loadPlayerName() {
-    const { data, error } = await supabase.from('players').select('name').eq('id', playerId).single();
+    const { data, error } = await supabase.from('players').select('name, team_id').eq('id', playerId).single();
     if (error) return messageEl.textContent = error.message;
     document.getElementById('player-name-header').textContent = data.name + ' Stats';
+    playerTeamId = data.team_id;
+    await loadGames();
+  }
+
+  async function loadGames() {
+    if (!playerTeamId) return;
+    const { data: games, error } = await supabase
+      .from('games')
+      .select('id, date, home_team_id, away_team_id')
+      .or(`home_team_id.eq.${playerTeamId},away_team_id.eq.${playerTeamId}`)
+      .order('date', { ascending: true });
+
+    if (error) return messageEl.textContent = error.message;
+
+    const select = document.getElementById('game-select');
+    const editSelect = document.getElementById('edit-game-select');
+    select.innerHTML = '';
+    editSelect.innerHTML = '';
+
+    for (const game of games) {
+      const { data: home } = await supabase.from('teams').select('name').eq('id', game.home_team_id).single();
+      const { data: away } = await supabase.from('teams').select('name').eq('id', game.away_team_id).single();
+
+      const text = `${away?.name || 'Away'} @ ${home?.name || 'Home'} - ${game.date}`;
+
+      const option = document.createElement('option');
+      option.value = game.id;
+      option.textContent = text;
+      select.appendChild(option);
+
+      const editOption = document.createElement('option');
+      editOption.value = game.id;
+      editOption.textContent = text;
+      editSelect.appendChild(editOption);
+    }
   }
 
   async function loadStats() {
     const { data, error } = await supabase
       .from('player_stats')
-      .select('*, games(date)')
+      .select('*, games(date, home_team_id, away_team_id)')
       .eq('player_id', playerId)
       .order('id', { ascending:true });
     if (error) return messageEl.textContent = error.message;
@@ -99,11 +137,13 @@
     statsCache = data;
     const tbody = document.getElementById("stats-body");
     tbody.innerHTML = "";
-    data.forEach(stat => {
+    for (const stat of data) {
+      const { data: home } = await supabase.from('teams').select('name').eq('id', stat.games.home_team_id).single();
+      const { data: away } = await supabase.from('teams').select('name').eq('id', stat.games.away_team_id).single();
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${stat.id}</td>
-        <td>${stat.games?.date || ''}</td>
+        <td>${away?.name || 'Away'} @ ${home?.name || 'Home'} - ${stat.games.date}</td>
         <td>${stat.touchdowns}</td>
         <td>${stat.receptions}</td>
         <td>${stat.yards}</td>
@@ -116,12 +156,13 @@
         </td>
       `;
       tbody.appendChild(tr);
-    });
+    }
   }
 
   async function addStats() {
     const payload = {
       player_id: playerId,
+      game_id: Number(document.getElementById('game-select').value),
       touchdowns: Number(document.getElementById('touchdowns').value) || 0,
       receptions: Number(document.getElementById('receptions').value) || 0,
       yards: Number(document.getElementById('yards').value) || 0,
@@ -147,6 +188,7 @@
   function editStats(id) {
     editingStatId = id;
     const stat = statsCache.find(s => s.id === id);
+    document.getElementById('edit-game-select').value = stat.game_id;
     document.getElementById('edit-touchdowns').value = stat.touchdowns;
     document.getElementById('edit-receptions').value = stat.receptions;
     document.getElementById('edit-yards').value = stat.yards;
@@ -165,6 +207,7 @@
   async function submitUpdate() {
     if (!editingStatId) return;
     const payload = {
+      game_id: Number(document.getElementById('edit-game-select').value),
       touchdowns: Number(document.getElementById('edit-touchdowns').value) || 0,
       receptions: Number(document.getElementById('edit-receptions').value) || 0,
       yards: Number(document.getElementById('edit-yards').value) || 0,
@@ -195,8 +238,7 @@
   window.deleteStats = deleteStats;
 
   checkAuth().then(() => {
-    loadPlayerName();
-    loadStats();
+    loadPlayerName().then(loadStats);
   });
 </script>
 
