@@ -141,20 +141,61 @@ USING (can_manage_league(auth.uid(), league_id));
 -- PLAYERS
 -- ==================================================
 
-DROP POLICY IF EXISTS "Managers can insert players" ON players;
-CREATE POLICY "Managers can insert players"
-ON players FOR INSERT TO authenticated
-WITH CHECK (can_manage_league(auth.uid(), league_id));
+DROP POLICY IF EXISTS "Managers can add players" ON players;
+CREATE POLICY "Managers can add players"
+ON players
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM teams t
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE t.id = players.team_id
+      AND lm.user_id = auth.uid()
+  )
+);
 
 DROP POLICY IF EXISTS "Managers can update players" ON players;
 CREATE POLICY "Managers can update players"
-ON players FOR UPDATE TO authenticated
-USING (can_manage_league(auth.uid(), league_id));
+ON players
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM teams t
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE t.id = players.team_id
+      AND lm.user_id = auth.uid()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM teams t
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE t.id = players.team_id
+      AND lm.user_id = auth.uid()
+  )
+);
+
 
 DROP POLICY IF EXISTS "Managers can delete players" ON players;
 CREATE POLICY "Managers can delete players"
-ON players FOR DELETE TO authenticated
-USING (can_manage_league(auth.uid(), league_id));
+ON players
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM teams t
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE t.id = players.team_id
+      AND lm.user_id = auth.uid()
+  )
+);
+
 
 -- ==================================================
 -- GAMES
@@ -181,18 +222,51 @@ USING (can_manage_league(auth.uid(), league_id));
 
 DROP POLICY IF EXISTS "Managers can insert player_stats" ON player_stats;
 CREATE POLICY "Managers can insert player_stats"
-ON player_stats FOR INSERT TO authenticated
-WITH CHECK (can_manage_league(auth.uid(), league_id));
+ON player_stats
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE p.id = player_stats.player_id
+      AND lm.user_id = auth.uid()
+  )
+);
 
 DROP POLICY IF EXISTS "Managers can update player_stats" ON player_stats;
 CREATE POLICY "Managers can update player_stats"
-ON player_stats FOR UPDATE TO authenticated
-USING (can_manage_league(auth.uid(), league_id));
+ON player_stats
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE p.id = player_stats.player_id
+      AND lm.user_id = auth.uid()
+  )
+);
 
 DROP POLICY IF EXISTS "Managers can delete player_stats" ON player_stats;
 CREATE POLICY "Managers can delete player_stats"
-ON player_stats FOR DELETE TO authenticated
-USING (can_manage_league(auth.uid(), league_id));
+ON player_stats
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE p.id = player_stats.player_id
+      AND lm.user_id = auth.uid()
+  )
+);
 
 -- ==================================================
 -- COMBINE RESULTS
@@ -200,15 +274,50 @@ USING (can_manage_league(auth.uid(), league_id));
 
 DROP POLICY IF EXISTS "Managers can insert combine_results" ON combine_results;
 CREATE POLICY "Managers can insert combine_results"
-ON combine_results FOR INSERT TO authenticated
-WITH CHECK (can_manage_league(auth.uid(), league_id));
+ON combine_results
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE p.id = combine_results.player_id
+      AND lm.user_id = auth.uid()
+  )
+);
 
 DROP POLICY IF EXISTS "Managers can update combine_results" ON combine_results;
 CREATE POLICY "Managers can update combine_results"
-ON combine_results FOR UPDATE TO authenticated
-USING (can_manage_league(auth.uid(), league_id));
+ON combine_results
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE p.id = combine_results.player_id
+      AND lm.user_id = auth.uid()
+  )
+);
+
 
 DROP POLICY IF EXISTS "Managers can delete combine_results" ON combine_results;
 CREATE POLICY "Managers can delete combine_results"
-ON combine_results FOR DELETE TO authenticated
-USING (can_manage_league(auth.uid(), league_id));
+ON combine_results
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM players p
+    JOIN teams t ON t.id = p.team_id
+    JOIN league_managers lm ON lm.league_id = t.league_id
+    WHERE p.id = combine_results.player_id
+      AND lm.user_id = auth.uid()
+  )
+);
+

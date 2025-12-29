@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>League Player Stats</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+  header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+  h1 { margin:0; text-align:center; }
+  #filters { text-align:center; margin:1rem; }
+  select { padding:0.5rem; margin-right:0.5rem; }
+  table { border-collapse: collapse; width: 90%; margin:auto; margin-top:1rem; }
+  th, td { border:1px solid #ccc; padding:0.5rem; text-align:center; cursor:pointer; }
+  th { background:#f2f2f2; }
+  #message { color:red; text-align:center; margin-top:0.5rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>League Player Stats</h1>
+</header>
+
+<div id="filters">
+  <select id="league-select"></select>
+  <select id="team-select"></select>
+  <button onclick="window.loadLeagueStats()">Filter</button>
+  <div id="message"></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th data-key="name">Player</th>
+      <th data-key="team">Team</th>
+      <th data-key="game_id">Game</th>
+      <th data-key="touchdowns">TDs</th>
+      <th data-key="receptions">Receptions</th>
+      <th data-key="yards">Yards</th>
+      <th data-key="interceptions">Ints</th>
+      <th data-key="sacks">Sacks</th>
+      <th data-key="flags_pulled">Flags</th>
+    </tr>
+  </thead>
+  <tbody id="stats-body"></tbody>
+</table>
+
+<script type="module">
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const messageEl = document.getElementById('message');
+let allStats = []; // flatten all player stats here
+let sortState = {}; // track ascending/descending for each column
+
+async function checkAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+}
+
+async function loadLeagues() {
+  const { data, error } = await supabase.from('leagues').select('*').order('name');
+  if (error) return messageEl.textContent = error.message;
+  const leagueSelect = document.getElementById('league-select');
+  leagueSelect.innerHTML = '<option value="">Select League</option>';
+  data.forEach(l => {
+    const option = document.createElement('option');
+    option.value = l.id;
+    option.textContent = l.name;
+    leagueSelect.appendChild(option);
+  });
+}
+
+async function loadTeams() {
+  const leagueId = document.getElementById('league-select').value;
+  const teamSelect = document.getElementById('team-select');
+  teamSelect.innerHTML = '<option value="">All Teams</option>';
+  if (!leagueId) return;
+
+  const { data, error } = await supabase.from('teams').select('*').eq('league_id', leagueId).order('name');
+  if (error) return messageEl.textContent = error.message;
+
+  data.forEach(t => {
+    const option = document.createElement('option');
+    option.value = t.id;
+    option.textContent = t.name;
+    teamSelect.appendChild(option);
+  });
+}
+
+document.getElementById('league-select').addEventListener('change', loadTeams);
+
+async function loadLeagueStats() {
+  const leagueId = document.getElementById('league-select').value;
+  const teamId = document.getElementById('team-select').value;
+
+  if (!leagueId) return;
+
+  try {
+    let playersData;
+    if (teamId) {
+      const { data, error } = await supabase
+        .from('players')
+        .select('id,name,team_id,teams(name,league_id),player_stats(*)')
+        .eq('team_id', teamId)
+        .order('name');
+      if (error) throw error;
+      playersData = data;
+    } else {
+      const { data: teams, error: teamErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('league_id', leagueId);
+      if (teamErr) throw teamErr;
+
+      const teamIds = teams.map(t => t.id);
+      if (teamIds.length === 0) {
+        document.getElementById('stats-body').innerHTML = '';
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('players')
+        .select('id,name,team_id,teams(name,league_id),player_stats(*)')
+        .in('team_id', teamIds)
+        .order('name');
+      if (error) throw error;
+      playersData = data;
+    }
+
+    // flatten stats
+    allStats = [];
+    playersData.forEach(player => {
+      const teamName = player.teams?.name || 'N/A';
+      const stats = player.player_stats || [];
+      if (stats.length === 0) {
+        allStats.push({ name: player.name, team: teamName, noStats: true });
+      } else {
+        stats.forEach(s => {
+          allStats.push({ name: player.name, team: teamName, noStats: false, ...s });
+        });
+      }
+    });
+
+    renderStatsTable(allStats);
+
+  } catch (err) {
+    messageEl.textContent = err.message;
+  }
+}
+
+function renderStatsTable(data) {
+  const tbody = document.getElementById('stats-body');
+  tbody.innerHTML = '';
+
+  // sort "No Stats" to bottom
+  const sortedData = [...data].sort((a,b) => {
+    if(a.noStats && !b.noStats) return 1;
+    if(!a.noStats && b.noStats) return -1;
+    return 0;
+  });
+
+  sortedData.forEach(stat => {
+    const tr = document.createElement('tr');
+    if(stat.noStats) {
+      tr.innerHTML = `<td>${stat.name}</td><td>${stat.team}</td><td colspan="7">No Stats</td>`;
+    } else {
+      tr.innerHTML = `
+        <td>${stat.name}</td>
+        <td>${stat.team}</td>
+        <td>${stat.game_id || ''}</td>
+        <td>${stat.touchdowns || 0}</td>
+        <td>${stat.receptions || 0}</td>
+        <td>${stat.yards || 0}</td>
+        <td>${stat.interceptions || 0}</td>
+        <td>${stat.sacks || 0}</td>
+        <td>${stat.flags_pulled || 0}</td>
+      `;
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+// Sorting by clicking headers
+document.querySelectorAll('th[data-key]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.getAttribute('data-key');
+    let asc = sortState[key] === 'asc' ? false : true;
+    sortState[key] = asc ? 'asc' : 'desc';
+
+    const statsToSort = allStats.filter(s => !s.noStats);
+    statsToSort.sort((a,b) => {
+      const valA = a[key] || 0;
+      const valB = b[key] || 0;
+      if(valA < valB) return asc ? -1 : 1;
+      if(valA > valB) return asc ? 1 : -1;
+      return 0;
+    });
+
+    // combine sorted stats + No Stats at bottom
+    const noStats = allStats.filter(s => s.noStats);
+    renderStatsTable([...statsToSort, ...noStats]);
+  });
+});
+
+// Expose to window
+window.loadLeagueStats = loadLeagueStats;
+window.loadTeams = loadTeams;
+
+checkAuth().then(async () => {
+  await loadLeagues();
+  loadTeams();
+});
+</script>
+
+</body>
+</html>

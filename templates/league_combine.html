@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>League Combine Results</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: system-ui, sans-serif; background:#f5f7fa; margin:0; padding:0; }
+  header { background:#2563eb; color:white; padding:1rem; text-align:center; }
+  h1 { margin:0; text-align:center; }
+  #filters { text-align:center; margin:1rem; }
+  select { padding:0.5rem; margin-right:0.5rem; }
+  table { border-collapse: collapse; width: 90%; margin:auto; margin-top:1rem; }
+  th, td { border:1px solid #ccc; padding:0.5rem; text-align:center; }
+  th { background:#f2f2f2; }
+  #message { color:red; text-align:center; margin-top:0.5rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>League Combine Results</h1>
+</header>
+
+<div id="filters">
+  <select id="league-select"></select>
+  <select id="team-select"></select>
+  <button onclick="loadCombineResults()">Filter</button>
+  <div id="message"></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Player</th>
+      <th>Team</th>
+      <th>Date</th>
+      <th>40 Yard</th>
+      <th>Bench Press</th>
+      <th>Vertical</th>
+      <th>Broad Jump</th>
+      <th>Shuttle</th>
+      <th>3 Cone</th>
+    </tr>
+  </thead>
+  <tbody id="combine-body"></tbody>
+</table>
+
+<script type="module">
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const messageEl = document.getElementById('message');
+
+async function checkAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+}
+
+async function loadLeagues() {
+  const { data, error } = await supabase.from('leagues').select('*').order('name');
+  if (error) return messageEl.textContent = error.message;
+  const leagueSelect = document.getElementById('league-select');
+  leagueSelect.innerHTML = '<option value="">Select League</option>';
+  data.forEach(l => {
+    const option = document.createElement('option');
+    option.value = l.id;
+    option.textContent = l.name;
+    leagueSelect.appendChild(option);
+  });
+}
+
+async function loadTeams() {
+  const leagueId = document.getElementById('league-select').value;
+  const teamSelect = document.getElementById('team-select');
+  teamSelect.innerHTML = '<option value="">All Teams</option>';
+  if (!leagueId) return;
+
+  const { data, error } = await supabase.from('teams').select('*').eq('league_id', leagueId).order('name');
+  if (error) return messageEl.textContent = error.message;
+
+  data.forEach(t => {
+    const option = document.createElement('option');
+    option.value = t.id;
+    option.textContent = t.name;
+    teamSelect.appendChild(option);
+  });
+}
+
+document.getElementById('league-select').addEventListener('change', loadTeams);
+
+async function loadCombineResults() {
+  const leagueId = document.getElementById('league-select').value;
+  const teamId = document.getElementById('team-select').value;
+
+  if (!leagueId) return;
+
+  let playersData;
+  try {
+    if (teamId) {
+      const { data, error } = await supabase
+        .from('players')
+        .select('id,name,team_id,teams(name,league_id),combine_results(*)')
+        .eq('team_id', teamId)
+        .order('name');
+      if (error) throw error;
+      playersData = data;
+    } else {
+      const { data: teams, error: teamErr } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('league_id', leagueId);
+      if (teamErr) throw teamErr;
+
+      const teamIds = teams.map(t => t.id);
+      if (teamIds.length === 0) {
+        document.getElementById('combine-body').innerHTML = '';
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('players')
+        .select('id,name,team_id,teams(name,league_id),combine_results(*)')
+        .in('team_id', teamIds)
+        .order('name');
+      if (error) throw error;
+      playersData = data;
+    }
+
+    renderCombineTable(playersData);
+
+  } catch (err) {
+    messageEl.textContent = err.message;
+  }
+}
+
+function renderCombineTable(data) {
+  const tbody = document.getElementById('combine-body');
+  tbody.innerHTML = '';
+
+  data.forEach(player => {
+    const teamName = player.teams?.name || 'N/A';
+    const combines = player.combine_results || [];
+
+    if (combines.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${player.name}</td><td>${teamName}</td><td colspan="7">No Combine Data</td>`;
+      tbody.appendChild(tr);
+    } else {
+      combines.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${player.name}</td>
+          <td>${teamName}</td>
+          <td>${c.date || ''}</td>
+          <td>${c.forty_yard || ''}</td>
+          <td>${c.bench_press || ''}</td>
+          <td>${c.vertical || ''}</td>
+          <td>${c.broad_jump || ''}</td>
+          <td>${c.shuttle || ''}</td>
+          <td>${c.three_cone || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  });
+}
+window.loadCombineResults = loadCombineResults;
+window.loadLeagues = loadLeagues;
+window.loadTeams = loadTeams;
+
+checkAuth().then(async () => {
+  await loadLeagues();
+  loadTeams();
+});
+</script>
+
+</body>
+</html>
