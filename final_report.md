@@ -11,7 +11,7 @@
 <!-- Include architecture diagrams, ER diagrams, screenshots, or demo videos -->
 
 - Diagram(s):
-  - ![Diagram description](path/to/diagram.png)
+  - ![Supabase ERD Diagram](./images/supabase-schema.png)
 
 - Demo Video / GIF:
   - [Link to demo video](https://)
