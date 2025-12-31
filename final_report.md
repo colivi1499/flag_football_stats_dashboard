@@ -14,7 +14,7 @@
   - ![Supabase ERD Diagram](./images/supabase-schema.png)
 
 - Demo Video / GIF:
-  - [Link to demo video](https://)
+  - [Link to demo video](./images/flag_football_stats_demo.mp4)
   - ![Demo GIF](path/to/demo.gif)
 
 ---
